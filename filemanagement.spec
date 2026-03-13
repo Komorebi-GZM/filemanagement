@@ -24,6 +24,14 @@ a = Analysis(
 )
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# 修改输出目录，避免权限冲突
+dist_dir = 'dist_new'
+
+# 确保输出目录存在
+import os
+if not os.path.exists(dist_dir):
+    os.makedirs(dist_dir)
+
 executable = EXE(
     pyz,
     a.scripts,
@@ -44,4 +52,5 @@ executable = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,  # 可以添加图标文件路径
+    distpath=dist_dir,
 )

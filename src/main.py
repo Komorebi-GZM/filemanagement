@@ -14,7 +14,15 @@ from src.app.viewmodel.signals import MainSignals
 
 
 def main() -> int:
-    project_root = Path(__file__).resolve().parents[1]
+    # 处理PyInstaller打包后的路径
+    import sys
+    if getattr(sys, 'frozen', False):
+        # 打包后的环境
+        project_root = Path(sys._MEIPASS)
+    else:
+        # 开发环境
+        project_root = Path(__file__).resolve().parents[1]
+    
     settings = load_settings(project_root / "config" / "config.ini")
     paths = resolve_paths(project_root=project_root, active_user=settings.active_user)
 
