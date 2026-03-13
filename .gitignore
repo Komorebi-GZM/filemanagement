@@ -1,0 +1,29 @@
+# 忽略的文件和目录
+
+# 临时文件
+*.tmp
+*.temp
+
+# 日志文件
+logs/
+*.log
+
+# 数据库文件
+data/
+
+# 虚拟环境
+.conda-env/
+venv/
+env/
+
+# 编译产物
+__pycache__/
+*.pyc
+
+# IDE 相关
+.vscode/
+.idea/
+
+# 操作系统相关
+.DS_Store
+Thumbs.db
