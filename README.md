@@ -90,9 +90,21 @@ conda run -p .\.conda-env python -m pip install -r requirements.txt
 
 #### 运行
 
+#### 方法1：使用启动脚本
 ```bash
 cd /d D:\file_management_V1.0.0
-conda run -p .\.conda-env python -m src.main
+start.bat
+```
+
+#### 方法2：直接运行可执行文件
+- 进入 `dist_new` 目录
+- 双击 `文件管理系统.exe` 运行应用
+
+#### 方法3：使用Python直接运行
+```bash
+cd /d D:\file_management_V1.0.0
+conda activate mag_app
+python -m src.main
 ```
 
 ---
@@ -165,8 +177,37 @@ conda run -p .\.conda-env python -m src.main
 
 ### 注意事项
 
-- 本系统仅在本地运行，所有数据存储在本地 SQLite 数据库中  
-- 支持的预览文件类型：图片（`.png`, `.jpg`, `.jpeg`, `.gif`）、文本文件（`.txt`, `.md`, `.py`, `.json`, `.xml`, `.html`）  
-- 软删除的文件可以在数据库中恢复，不会实际删除本地文件  
-- 悬浮窗提示：无需额外操作，鼠标悬停即可自动触发  
+- 本系统仅在本地运行，所有数据存储在本地 SQLite 数据库中
+- 支持的预览文件类型：图片（`.png`, `.jpg`, `.jpeg`, `.gif`）、文本文件（`.txt`, `.md`, `.py`, `.json`, `.xml`, `.html`）
+- 软删除的文件可以在数据库中恢复，不会实际删除本地文件
+- 悬浮窗提示：无需额外操作，鼠标悬停即可自动触发
+
+---
+
+### Release 发布指南
+
+#### 1. 准备发布包
+1. 确保所有代码已提交到 git 仓库
+2. 运行 `package.bat` 脚本生成最新的可执行文件
+3. 可执行文件将生成在 `dist_new` 目录中
+
+#### 2. 创建 GitHub Release
+1. 登录 GitHub 并进入项目仓库
+2. 点击 "Releases" 标签
+3. 点击 "Draft a new release"
+4. 填写版本号（例如 v1.0.0）
+5. 填写发布说明，包括新增功能和修复的问题
+6. 上传 `dist_new` 目录中的可执行文件
+7. 点击 "Publish release"
+
+#### 3. 发布包内容
+发布包应包含以下内容：
+- `文件管理系统.exe` - 主可执行文件
+- `README.md` - 使用说明
+
+#### 4. 用户安装说明
+1. 从 GitHub Release 页面下载发布包
+2. 解压到任意目录
+3. 双击 `文件管理系统.exe` 即可运行
+4. 无需安装 Python 或其他依赖  
 
