@@ -441,7 +441,7 @@ class MainWindow(QMainWindow):
             
             # 加载文件印记
             imprints = self.vm.get_file_imprints(file_id)
-            imprint_text = "\n\n".join([f"{imprint.created_at}: {imprint.content}" for imprint in imprints])
+            imprint_text = "\n\n".join([f"{imprint['created_at']}: {imprint['content']}" for imprint in imprints])
             self.imprint_tab.setText(imprint_text or "无印记")
     
     def _on_tag_clicked(self, item: QTreeWidgetItem, column: int):
@@ -541,7 +541,7 @@ class MainWindow(QMainWindow):
                 self.vm.add_file_imprint(file_id, imprint)
                 # 重新加载印记
                 imprints = self.vm.get_file_imprints(file_id)
-                imprint_text = "\n\n".join([f"{imprint.created_at}: {imprint.content}" for imprint in imprints])
+                imprint_text = "\n\n".join([f"{imp['created_at']}: {imp['content']}" for imp in imprints])
                 self.imprint_tab.setText(imprint_text or "无印记")
                 QMessageBox.information(self, "添加成功", "文件印记已添加")
     
