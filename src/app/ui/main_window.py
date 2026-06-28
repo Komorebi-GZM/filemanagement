@@ -441,7 +441,7 @@ class MainWindow(QMainWindow):
             
             # 加载文件印记
             imprints = self.vm.get_file_imprints(file_id)
-            imprint_text = "\n\n".join([f"{imprint['created_at']}: {imprint['content']}" for imprint in imprints])
+            imprint_text = "\n\n".join([f"{imprint.created_at}: {imprint.content}" for imprint in imprints])
             self.imprint_tab.setText(imprint_text or "无印记")
     
     def _on_tag_clicked(self, item: QTreeWidgetItem, column: int):
@@ -541,7 +541,7 @@ class MainWindow(QMainWindow):
                 self.vm.add_file_imprint(file_id, imprint)
                 # 重新加载印记
                 imprints = self.vm.get_file_imprints(file_id)
-                imprint_text = "\n\n".join([f"{imp['created_at']}: {imp['content']}" for imp in imprints])
+                imprint_text = "\n\n".join([f"{imp.created_at}: {imp.content}" for imp in imprints])
                 self.imprint_tab.setText(imprint_text or "无印记")
                 QMessageBox.information(self, "添加成功", "文件印记已添加")
     
@@ -564,7 +564,13 @@ class MainWindow(QMainWindow):
                     # 构建标签的父子关系显示
                     tag_path = []
                     current_tag = tag
+                    visited_tag_ids = set()
                     while current_tag:
+                        if current_tag.id in visited_tag_ids:
+                            tag_path.insert(0, f"[循环引用: {current_tag.tag_name}]")
+                            break
+                        visited_tag_ids.add(current_tag.id)
+
                         tag_path.insert(0, current_tag.tag_name)
                         if current_tag.parent_id:
                             # 查找父标签

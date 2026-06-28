@@ -11,6 +11,7 @@ from typing import Iterable, Optional, Sequence
 from src.app.db.database import Database
 from src.app.model.file_record import FileRecord
 from src.app.model.tag import Tag
+from src.app.model.file_imprint import FileImprint
 from src.app.viewmodel.signals import MainSignals
 
 logger = logging.getLogger(__name__)
@@ -174,23 +175,20 @@ class MainViewModel:
         Returns:
             磁盘盘符列表（如 ["C:", "D:"]）
         """
-        import string
-        from pathlib import Path
-        
         drives = set()
         with self._db.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT DISTINCT full_path
+                SELECT DISTINCT SUBSTR(full_path, 1, 2) AS drive
                 FROM files
-                WHERE is_deleted = 0
+                WHERE is_deleted = 0 AND length(full_path) >= 2 AND SUBSTR(full_path, 2, 1) = ':'
                 """
             ).fetchall()
         
         for r in rows:
-            path = Path(r["full_path"])
-            if path.drive:
-                drives.add(path.drive)
+            drive = r["drive"]
+            if drive:
+                drives.add(drive)
         
         return sorted(drives)
 
@@ -594,7 +592,7 @@ class MainViewModel:
             )
             conn.commit()
 
-    def get_file_imprints(self, file_id: int) -> list[dict]:
+    def get_file_imprints(self, file_id: int) -> list[FileImprint]:
         """
         获取文件的特定印记，按时间倒序排序
         
@@ -616,11 +614,11 @@ class MainViewModel:
             ).fetchall()
         
         return [
-            {
-                "id": r["id"],
-                "content": r["content"],
-                "created_at": r["created_at"]
-            }
+            FileImprint(
+                id=r["id"],
+                content=r["content"],
+                created_at=r["created_at"]
+            )
             for r in rows
         ]
 
