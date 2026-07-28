@@ -6,17 +6,20 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from PyQt5.QtCore import Qt, QPoint, QRect, QMimeData
-from PyQt5.QtGui import QDrag, QImage, QPainter, QPalette, QBrush, QColor, QFontMetrics
+from PyQt5.QtGui import QDrag, QImage, QPainter, QPalette, QBrush, QColor, QFontMetrics, QKeySequence
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget,
     QTreeWidgetItem, QListWidget, QListWidgetItem, QLabel, QLineEdit, QPushButton,
     QSplitter, QMenu, QAction, QInputDialog, QMessageBox, QTabWidget,
-    QTextEdit, QDateTimeEdit, QFormLayout, QDialog, QDialogButtonBox, QFileDialog, QComboBox
+    QTextEdit, QDateTimeEdit, QFormLayout, QDialog, QDialogButtonBox, QFileDialog, QComboBox,
+    QShortcut
 )
 
 from src.app.model.file_record import FileRecord
+from src.app.ui.command_palette import CommandPalette
 from src.app.viewmodel.main_viewmodel import MainViewModel
 from src.app.viewmodel.signals import MainSignals
+
 
 
 class FileListWidget(QListWidget):
@@ -197,13 +200,31 @@ class ImprintDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, app_name: str, vm: MainViewModel, signals: MainSignals):
+    def __init__(
+        self,
+        app_name: str = "文件管理系统",
+        vm: Optional[MainViewModel] = None,
+        signals: Optional[MainSignals] = None
+    ):
         super().__init__()
         self.setWindowTitle(app_name)
         self.setMinimumSize(1000, 600)
         
+        if signals is None:
+            signals = MainSignals()
+        if vm is None:
+            from src.app.db.database import Database
+            db = Database(":memory:")
+            vm = MainViewModel(db=db, signals=signals)
+        
         self.vm = vm
         self.signals = signals
+        
+        self.command_palette = CommandPalette(self)
+        self.command_palette.hide()
+
+        self.shortcut_k = QShortcut(QKeySequence("Ctrl+K"), self)
+        self.shortcut_k.activated.connect(self.toggle_command_palette)
         
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -311,6 +332,20 @@ class MainWindow(QMainWindow):
         
         # 初始化数据
         self._initialize_data()
+    
+    def toggle_command_palette(self):
+        if self.command_palette.isHidden():
+            self.command_palette.show()
+            self.command_palette.search_box.setFocus()
+        else:
+            self.command_palette.hide()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_K and (event.modifiers() & Qt.ControlModifier):
+            self.toggle_command_palette()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
     
     def _connect_signals(self):
         # 搜索和筛选
