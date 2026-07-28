@@ -422,6 +422,9 @@ class MainViewModel:
         Returns:
             标记列表
         """
+        if self._db is None:
+            return []
+
         with self._db.connect() as conn:
             query = """
                 SELECT id, tag_name, tag_type, parent_id, is_deleted, deleted_at, created_at, updated_at
@@ -734,11 +737,7 @@ class MainViewModel:
         Returns:
             匹配的标记列表
         """
-        if self._db and hasattr(self._db, "get_all_tags"):
-            all_tags = self._db.get_all_tags()
-        else:
-            all_tags = self.get_all_tags()
-
+        all_tags = self.get_all_tags()
         if not query:
             return all_tags
-        return [t for t in all_tags if query.lower() in t.tag_name.lower()]
+        return [t for t in all_tags if query.lower() in (t.tag_name or "").lower()]
