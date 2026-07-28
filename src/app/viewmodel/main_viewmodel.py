@@ -66,7 +66,7 @@ class MainViewModel:
     主视图模型类
     负责处理核心业务逻辑，包括文件管理、标记管理、搜索等功能
     """
-    def __init__(self, db: Database, signals: MainSignals) -> None:
+    def __init__(self, db: Optional[Database] = None, signals: Optional[MainSignals] = None) -> None:
         """
         初始化主视图模型
         
@@ -76,6 +76,14 @@ class MainViewModel:
         """
         self._db = db
         self.signals = signals
+
+    @property
+    def db(self) -> Optional[Database]:
+        return self._db
+
+    @db.setter
+    def db(self, value: Optional[Database]) -> None:
+        self._db = value
 
     def list_files(self, limit: int = 200, tag_id: Optional[int] = None, sort_by: str = "name", 
                    sort_order: str = "asc", file_ext: Optional[str] = None, 
@@ -715,3 +723,22 @@ class MainViewModel:
             标签列表
         """
         return self.list_tags()
+
+    def fuzzy_search_tags(self, query: str = "") -> list[Tag]:
+        """
+        模糊搜索标记
+        
+        Args:
+            query: 搜索关键词
+            
+        Returns:
+            匹配的标记列表
+        """
+        if self._db and hasattr(self._db, "get_all_tags"):
+            all_tags = self._db.get_all_tags()
+        else:
+            all_tags = self.get_all_tags()
+
+        if not query:
+            return all_tags
+        return [t for t in all_tags if query.lower() in t.tag_name.lower()]
