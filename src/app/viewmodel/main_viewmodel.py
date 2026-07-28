@@ -741,3 +741,20 @@ class MainViewModel:
         if not query:
             return all_tags
         return [t for t in all_tags if query.lower() in (t.tag_name or "").lower()]
+
+    def count_files(self, tag_id: Optional[int] = None) -> int:
+        """
+        获取文件数量
+        
+        Args:
+            tag_id: 按标记筛选的文件数量，None表示所有未删除文件数量
+            
+        Returns:
+            文件数量
+        """
+        if self._db is None:
+            return 0
+        if tag_id is None:
+            return self._db.count_all_files()
+        return self._db.count_files_by_tag(tag_id)
+

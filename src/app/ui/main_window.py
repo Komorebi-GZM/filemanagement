@@ -429,11 +429,13 @@ class MainWindow(QMainWindow):
         
         # 构建标签树
         tag_map = {}
-        root_item = QTreeWidgetItem(self.tag_tree, ["所有文件"])
+        all_count = self.vm.count_files(None)
+        root_item = QTreeWidgetItem(self.tag_tree, [f"所有文件 ({all_count})"])
         root_item.setData(0, Qt.UserRole, None)
         
         for tag in tags:
-            item = QTreeWidgetItem([tag.tag_name])
+            tag_count = self.vm.count_files(tag.id)
+            item = QTreeWidgetItem([f"{tag.tag_name} ({tag_count})"])
             item.setData(0, Qt.UserRole, tag.id)
             
             if tag.parent_id:

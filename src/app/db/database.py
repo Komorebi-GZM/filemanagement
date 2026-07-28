@@ -22,6 +22,24 @@ class Database:
         conn.execute("PRAGMA foreign_keys = ON;")
         return conn
 
+    def count_all_files(self) -> int:
+        with self.connect() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM files WHERE is_deleted = 0").fetchone()
+            return row[0] if row else 0
+
+    def count_files_by_tag(self, tag_id: int) -> int:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) FROM file_tag_relation ftr
+                JOIN files f ON f.id = ftr.file_id
+                WHERE ftr.tag_id = ? AND f.is_deleted = 0
+                """,
+                (tag_id,),
+            ).fetchone()
+            return row[0] if row else 0
+
+
 
 def apply_schema(conn: sqlite3.Connection, schema_sql: str) -> None:
     try:
