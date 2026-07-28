@@ -19,6 +19,7 @@ env/
 # 编译产物
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # IDE 相关
 .vscode/

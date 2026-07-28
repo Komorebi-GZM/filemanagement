@@ -8,12 +8,12 @@ echo ------------------------------------
 rem 切换到项目根目录
 cd /d "%~dp0"
 
-rem 激活mag_app环境并执行打包
-echo 正在激活mag_app环境...
-conda activate mag_app
+rem 激活py311-pack环境并执行打包
+echo 正在激活py311-pack环境...
+conda activate py311-pack
 
 if %errorlevel% neq 0 (
-    echo 激活环境失败，请确保已创建mag_app环境
+    echo 激活环境失败，请确保已创建py311-pack环境
     pause
     exit /b 1
 )
