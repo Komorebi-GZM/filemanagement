@@ -26,7 +26,4 @@ __pycache__/
 
 # 操作系统相关
 .DS_Store
-Thumbs.db
-
-# 隔离工作区
-.worktrees/
+Thumbs.db.worktrees/
