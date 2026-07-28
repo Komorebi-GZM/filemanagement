@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
     QTreeWidgetItem, QListWidget, QListWidgetItem, QLabel, QLineEdit, QPushButton,
     QSplitter, QMenu, QAction, QInputDialog, QMessageBox, QTabWidget,
     QTextEdit, QDateTimeEdit, QFormLayout, QDialog, QDialogButtonBox, QFileDialog, QComboBox,
-    QShortcut
+    QShortcut, QScrollArea, QSizePolicy
 )
 
 from src.app.model.file_record import FileRecord
@@ -20,6 +20,25 @@ from src.app.ui.command_palette import CommandPalette
 from src.app.viewmodel.main_viewmodel import MainViewModel
 from src.app.viewmodel.signals import MainSignals
 
+
+
+class TagChipWidget(QWidget):
+    def __init__(self, tag_id: int, tag_name: str, parent=None):
+        super().__init__(parent)
+        self.tag_id = tag_id
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        
+        self.label = QLabel(tag_name)
+        self.remove_btn = QPushButton("×")
+        self.remove_btn.setFixedSize(16, 16)
+        self.remove_btn.setStyleSheet("QPushButton { border: none; font-weight: bold; } QPushButton:hover { color: red; }")
+        
+        layout.addWidget(self.label)
+        layout.addWidget(self.remove_btn)
+        
+        self.setStyleSheet("TagChipWidget { background-color: #e0e0e0; border-radius: 4px; border: 1px solid #ccc; }")
 
 
 class FileListWidget(QListWidget):
@@ -222,6 +241,7 @@ class MainWindow(QMainWindow):
         
         self.command_palette = CommandPalette(self)
         self.command_palette.hide()
+        self.command_palette.tag_selected_for_file.connect(self._on_tag_selected_for_file)
 
         self.shortcut_k = QShortcut(QKeySequence("Ctrl+K"), self)
         self.shortcut_k.activated.connect(self.toggle_command_palette)
@@ -286,6 +306,25 @@ class MainWindow(QMainWindow):
         
         # 文件预览
         file_preview_layout = QVBoxLayout()
+        
+        # Tags Container
+        self.tags_container = QWidget()
+        self.tags_layout = QHBoxLayout()
+        self.tags_layout.setAlignment(Qt.AlignLeft)
+        self.tags_layout.setContentsMargins(0, 0, 0, 0)
+        self.tags_container.setLayout(self.tags_layout)
+        self.tags_container.setMinimumHeight(35)
+        self.tags_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
+        tags_scroll = QScrollArea()
+        tags_scroll.setWidgetResizable(True)
+        tags_scroll.setWidget(self.tags_container)
+        tags_scroll.setMaximumHeight(50)
+        tags_scroll.setFrameShape(QScrollArea.NoFrame)
+        
+        file_preview_layout.addWidget(QLabel("标签:"))
+        file_preview_layout.addWidget(tags_scroll)
+        
         self.file_preview = QTextEdit()
         self.file_preview.setReadOnly(True)
         file_preview_layout.addWidget(self.file_preview)
@@ -429,11 +468,13 @@ class MainWindow(QMainWindow):
         
         # 构建标签树
         tag_map = {}
-        root_item = QTreeWidgetItem(self.tag_tree, ["所有文件"])
+        all_count = self.vm.count_files(None)
+        root_item = QTreeWidgetItem(self.tag_tree, [f"所有文件 ({all_count})"])
         root_item.setData(0, Qt.UserRole, None)
         
         for tag in tags:
-            item = QTreeWidgetItem([tag.tag_name])
+            tag_count = self.vm.count_files(tag.id)
+            item = QTreeWidgetItem([f"{tag.tag_name} ({tag_count})"])
             item.setData(0, Qt.UserRole, tag.id)
             
             if tag.parent_id:
@@ -591,29 +632,26 @@ class MainWindow(QMainWindow):
             preview_content.append(f"文件大小: {file.file_size} bytes")
             preview_content.append(f"修改时间: {file.modify_time}")
             
-            # 文件标签
+            # 文件标签 UI 更新
+            while self.tags_layout.count():
+                item = self.tags_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+                elif item.spacerItem():
+                    self.tags_layout.removeItem(item.spacerItem())
+            
             tags = self.vm.get_file_tags(file.id)
             if tags:
-                preview_content.append("\n标签:")
                 for tag in tags:
-                    # 构建标签的父子关系显示
-                    tag_path = []
-                    current_tag = tag
-                    while current_tag:
-                        tag_path.insert(0, current_tag.tag_name)
-                        if current_tag.parent_id:
-                            # 查找父标签
-                            for t in tags:
-                                if t.id == current_tag.parent_id:
-                                    current_tag = t
-                                    break
-                            else:
-                                current_tag = None
-                        else:
-                            current_tag = None
-                    preview_content.append(f"  - {' / '.join(tag_path)}")
-            else:
-                preview_content.append("\n标签: 无")
+                    chip = TagChipWidget(tag.id, tag.tag_name)
+                    chip.remove_btn.clicked.connect(lambda checked, f_id=file.id, t_id=tag.id: self._remove_file_tag(f_id, t_id))
+                    self.tags_layout.addWidget(chip)
+            
+            plus_btn = QPushButton("+")
+            plus_btn.setFixedSize(24, 24)
+            plus_btn.clicked.connect(lambda checked, f_id=file.id, f_name=file.file_name: self._on_add_tag_btn_clicked(f_id, f_name))
+            self.tags_layout.addWidget(plus_btn)
+            self.tags_layout.addStretch()
             
             # 文件注释
             note = self.vm.get_file_note(file.id)
@@ -653,6 +691,26 @@ class MainWindow(QMainWindow):
             self.file_preview.setText("\n".join(preview_content))
         except Exception as e:
             self.file_preview.setText(f"预览失败: {str(e)}")
+
+
+    def _remove_file_tag(self, file_id: int, tag_id: int):
+        if hasattr(self.vm, "remove_file_tag"):
+            self.vm.remove_file_tag(file_id, tag_id)
+        elif hasattr(self.vm, "remove_tag_from_file"):
+            self.vm.remove_tag_from_file(file_id, tag_id)
+        self._on_file_selected()
+
+    def _on_add_tag_btn_clicked(self, file_id: int, file_name: str):
+        self.command_palette.set_context_file(file_id, file_name)
+        self.toggle_command_palette()
+
+    def _on_tag_selected_for_file(self, file_id: int, tag_id: int):
+        if hasattr(self.vm, "add_file_tag"):
+            self.vm.add_file_tag(file_id, tag_id)
+        elif hasattr(self.vm, "add_tag_to_file"):
+            self.vm.add_tag_to_file(file_id, tag_id)
+        self.command_palette.set_context_file(None, "")
+        self._on_file_selected()
 
 
 def run_ui(app_name: str, vm: MainViewModel, signals: MainSignals) -> int:
