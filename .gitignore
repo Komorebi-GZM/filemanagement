@@ -27,4 +27,10 @@ __pycache__/
 
 # 操作系统相关
 .DS_Store
-Thumbs.db.worktrees/
+Thumbs.db
+
+# AI 工具生成目录
+.superpowers/
+
+# Git worktree（独立分支工作区，不应被主仓库跟踪）
+.worktrees/

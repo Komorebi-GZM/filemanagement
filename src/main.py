@@ -9,6 +9,7 @@ from src.app.core.paths import resolve_paths
 from src.app.core.settings import load_settings
 from src.app.db.database import Database, apply_schema, load_schema_text
 from src.app.ui.main_window import run_ui
+from src.app.services.file_monitor import FileMonitor
 from src.app.viewmodel.main_viewmodel import MainViewModel
 from src.app.viewmodel.signals import MainSignals
 
@@ -44,7 +45,29 @@ def main() -> int:
 
     signals = MainSignals()
     vm = MainViewModel(db=db, signals=signals)
-    return run_ui(app_name=settings.app_name, vm=vm, signals=signals)
+
+    # FileMonitor: watch all unique parent directories of imported files
+    file_monitor = FileMonitor(debounce_ms=2000)
+    watch_dirs: set[Path] = set()
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT full_path FROM files WHERE is_deleted = 0"
+        ).fetchall()
+    for r in rows:
+        p = Path(r["full_path"]).parent
+        if p.exists():
+            watch_dirs.add(p)
+    if watch_dirs:
+        file_monitor.start(list(watch_dirs))
+        file_monitor.run()
+
+    # Connect FileMonitor to ViewModel
+    file_monitor.file_system_changed.connect(vm._on_file_system_changed)
+
+    try:
+        return run_ui(app_name=settings.app_name, vm=vm, signals=signals)
+    finally:
+        file_monitor.stop()
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSignal, Qt, QEvent
 from PyQt5.QtGui import QKeyEvent
 
 
@@ -24,6 +24,7 @@ class CommandPalette(QWidget):
 
         self.list_widget.itemActivated.connect(self._on_item_activated)
         self.search_box.textChanged.connect(self._on_text_changed)
+        self.search_box.installEventFilter(self)
 
     def set_context_file(self, file_id: int, file_name: str):
         self.context_file_id = file_id
@@ -52,8 +53,15 @@ class CommandPalette(QWidget):
             for h in self._history_items:
                 self.list_widget.addItem(QListWidgetItem(h))
 
+    def eventFilter(self, obj, event):
+        if obj is self.search_box and event.type() == QEvent.KeyPress:
+            if event.key() in (Qt.Key_Up, Qt.Key_Down):
+                self._on_arrow_key(event.key())
+                return True
+        return super().eventFilter(obj, event)
+
     def keyPressEvent(self, event: QKeyEvent):
-        if event.key() == Qt.Key_Up or event.key() == Qt.Key_Down:
+        if event.key() in (Qt.Key_Up, Qt.Key_Down):
             self._on_arrow_key(event.key())
             event.accept()
         else:
