@@ -82,3 +82,20 @@ CREATE TABLE IF NOT EXISTS file_imprints (
 
 CREATE INDEX IF NOT EXISTS idx_file_imprints_file_id ON file_imprints(file_id);
 CREATE INDEX IF NOT EXISTS idx_file_imprints_created_at ON file_imprints(created_at DESC);
+
+-- V1.3: Full-text search via FTS5
+CREATE VIRTUAL TABLE IF NOT EXISTS file_fts USING fts5(
+    file_id UNINDEXED,
+    content,
+    tokenize='unicode61'
+);
+
+CREATE TABLE IF NOT EXISTS file_content_status (
+    file_id INTEGER PRIMARY KEY,
+    content_length INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+        -- 'pending' | 'indexed' | 'skipped_too_large' | 'skipped_format' | 'error'
+    error_message TEXT,
+    indexed_at INTEGER,
+    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+);

@@ -103,6 +103,66 @@ class Database:
             )
             conn.commit()
 
+    def create_fts_table(self, conn: sqlite3.Connection) -> None:
+        conn.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS file_fts USING fts5(
+                file_id UNINDEXED,
+                content,
+                tokenize='unicode61'
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS file_content_status (
+                file_id INTEGER PRIMARY KEY,
+                content_length INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
+                error_message TEXT,
+                indexed_at INTEGER,
+                FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+            )
+        """)
+
+    def upsert_fts(self, conn: sqlite3.Connection, file_id: int, file_name: str, content: str) -> None:
+        fts_content = f"{file_name} {content}"
+        conn.execute("DELETE FROM file_fts WHERE file_id = ?", (file_id,))
+        conn.execute(
+            "INSERT INTO file_fts (file_id, content) VALUES (?, ?)",
+            (file_id, fts_content),
+        )
+        conn.execute(
+            """INSERT INTO file_content_status (file_id, content_length, status, indexed_at)
+               VALUES (?, ?, 'indexed', ?)
+               ON CONFLICT(file_id) DO UPDATE SET
+                   content_length = excluded.content_length,
+                   status = 'indexed',
+                   error_message = NULL,
+                   indexed_at = excluded.indexed_at""",
+            (file_id, len(fts_content), int(time.time())),
+        )
+
+    def delete_fts(self, conn: sqlite3.Connection, file_id: int) -> None:
+        conn.execute("DELETE FROM file_fts WHERE file_id = ?", (file_id,))
+        conn.execute("DELETE FROM file_content_status WHERE file_id = ?", (file_id,))
+
+    def search_fts(self, conn: sqlite3.Connection, query: str, limit: int = 200) -> list[dict]:
+        rows = conn.execute(
+            """SELECT f.id AS file_id, f.file_name, f.full_path, f.file_ext,
+                      f.file_size, f.modify_time, rank
+               FROM file_fts fts
+               JOIN files f ON f.id = fts.file_id
+               WHERE f.is_deleted = 0 AND file_fts MATCH ?
+               ORDER BY rank
+               LIMIT ?""",
+            (query, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_file_content_status(self, conn: sqlite3.Connection, file_id: int) -> Optional[dict]:
+        row = conn.execute(
+            "SELECT * FROM file_content_status WHERE file_id = ?", (file_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
     def record_search(self, query_json: str, timestamp: int) -> None:
         with self.connect() as conn:
             conn.execute(
