@@ -51,6 +51,8 @@ class IndexWorker(QObject):
             self.enqueue(file_id, path)
         self._total = self._queue.qsize()
         self._processed = 0
+        if self._total == 0:
+            self.indexing_finished.emit()
 
     def start(self) -> None:
         if self._running:
@@ -87,7 +89,7 @@ class IndexWorker(QObject):
             if processed_in_batch > 0:
                 conn.commit()
                 QThread.msleep(INDEX_BATCH_INTERVAL_MS)
-            if self._total > 0 and self._queue.empty() and self._processed >= self._total:
+            if self._queue.empty() and self._processed >= self._total:
                 self.indexing_finished.emit()
                 break
         conn.close()

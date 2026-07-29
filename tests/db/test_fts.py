@@ -21,8 +21,10 @@ class TestFTS:
         conn.executescript("""
             CREATE TABLE files (
                 id INTEGER PRIMARY KEY, file_name TEXT, full_path TEXT,
-                file_ext TEXT, file_size INTEGER, modify_time INTEGER,
-                is_deleted INTEGER NOT NULL DEFAULT 0
+                file_ext TEXT, file_size INTEGER, create_time INTEGER,
+                modify_time INTEGER, file_hash TEXT, is_deleted INTEGER NOT NULL DEFAULT 0,
+                deleted_at INTEGER, created_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
             );
         """)
         conn.execute("INSERT INTO files (id, file_name) VALUES (1, 'report.txt')")
@@ -38,8 +40,10 @@ class TestFTS:
         conn.executescript("""
             CREATE TABLE files (
                 id INTEGER PRIMARY KEY, file_name TEXT, full_path TEXT,
-                file_ext TEXT, file_size INTEGER, modify_time INTEGER,
-                is_deleted INTEGER NOT NULL DEFAULT 0
+                file_ext TEXT, file_size INTEGER, create_time INTEGER,
+                modify_time INTEGER, file_hash TEXT, is_deleted INTEGER NOT NULL DEFAULT 0,
+                deleted_at INTEGER, created_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
             );
         """)
         conn.execute("INSERT INTO files (id, file_name) VALUES (1, 'budget_2024.xlsx')")
@@ -54,8 +58,10 @@ class TestFTS:
         conn.executescript("""
             CREATE TABLE files (
                 id INTEGER PRIMARY KEY, file_name TEXT, full_path TEXT,
-                file_ext TEXT, file_size INTEGER, modify_time INTEGER,
-                is_deleted INTEGER NOT NULL DEFAULT 0
+                file_ext TEXT, file_size INTEGER, create_time INTEGER,
+                modify_time INTEGER, file_hash TEXT, is_deleted INTEGER NOT NULL DEFAULT 0,
+                deleted_at INTEGER, created_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
             );
         """)
         conn.execute("INSERT INTO files (id, file_name) VALUES (1, 'doc.txt')")
@@ -73,8 +79,10 @@ class TestFTS:
         conn.executescript("""
             CREATE TABLE files (
                 id INTEGER PRIMARY KEY, file_name TEXT, full_path TEXT,
-                file_ext TEXT, file_size INTEGER, modify_time INTEGER,
-                is_deleted INTEGER NOT NULL DEFAULT 0
+                file_ext TEXT, file_size INTEGER, create_time INTEGER,
+                modify_time INTEGER, file_hash TEXT, is_deleted INTEGER NOT NULL DEFAULT 0,
+                deleted_at INTEGER, created_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
             );
         """)
         conn.execute("INSERT INTO files (id, file_name) VALUES (1, 'doc.txt')")
@@ -90,8 +98,10 @@ class TestFTS:
         conn.executescript("""
             CREATE TABLE files (
                 id INTEGER PRIMARY KEY, file_name TEXT, full_path TEXT,
-                file_ext TEXT, file_size INTEGER, modify_time INTEGER,
-                is_deleted INTEGER NOT NULL DEFAULT 0
+                file_ext TEXT, file_size INTEGER, create_time INTEGER,
+                modify_time INTEGER, file_hash TEXT, is_deleted INTEGER NOT NULL DEFAULT 0,
+                deleted_at INTEGER, created_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
             );
         """)
         conn.execute("INSERT INTO files (id, file_name) VALUES (1, 'budget_2024.xlsx')")

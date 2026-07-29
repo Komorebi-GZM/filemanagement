@@ -147,7 +147,8 @@ class Database:
     def search_fts(self, conn: sqlite3.Connection, query: str, limit: int = 200) -> list[dict]:
         rows = conn.execute(
             """SELECT f.id AS file_id, f.file_name, f.full_path, f.file_ext,
-                      f.file_size, f.modify_time, rank
+                      f.file_size, f.modify_time, f.file_hash, f.create_time,
+                      f.created_at, f.updated_at, f.is_deleted, f.deleted_at, rank
                FROM file_fts fts
                JOIN files f ON f.id = fts.file_id
                WHERE f.is_deleted = 0 AND file_fts MATCH ?

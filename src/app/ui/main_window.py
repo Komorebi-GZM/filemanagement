@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget,
     QTreeWidgetItem, QListWidget, QListWidgetItem, QLabel, QLineEdit, QPushButton,
     QSplitter, QMenu, QAction, QInputDialog, QMessageBox, QTabWidget,
-    QTextEdit, QDateTimeEdit, QFormLayout, QDialog, QDialogButtonBox, QFileDialog, QComboBox,
+    QProgressBar, QTextEdit, QDateTimeEdit, QFormLayout, QDialog, QDialogButtonBox, QFileDialog, QComboBox,
     QShortcut, QScrollArea, QSizePolicy
 )
 
@@ -364,6 +364,16 @@ class MainWindow(QMainWindow):
         
         # 底部状态栏
         self.status_bar = self.statusBar()
+
+        self._indexing_label = QLabel("")
+        self._indexing_label.setVisible(False)
+        self.status_bar.addPermanentWidget(self._indexing_label)
+
+        self._import_progress = QProgressBar()
+        self._import_progress.setVisible(False)
+        self._import_progress.setMaximumWidth(150)
+        self._import_progress.setMaximumHeight(16)
+        self.status_bar.addPermanentWidget(self._import_progress)
         
         # 连接信号
         self._connect_signals()
@@ -401,7 +411,10 @@ class MainWindow(QMainWindow):
         
         # 信号连接
         self.signals.files_updated.connect(self._update_file_list)
+        self.signals.files_updated.connect(lambda _: self._indexing_label.setText(""))
         self.signals.tags_updated.connect(self._update_tag_tree)
+        self.signals.indexing_progress.connect(self._on_indexing_progress)
+        self.signals.import_progress.connect(self._on_import_progress)
     
     def _initialize_data(self):
         # 加载标签
@@ -709,6 +722,22 @@ class MainWindow(QMainWindow):
         self.command_palette.set_context_file(None, "")
         self._update_tag_tree()
         self._on_file_selected()
+
+
+    def _on_indexing_progress(self, current: int, total: int) -> None:
+        if total > 0 and current < total:
+            self._indexing_label.setText(f"Content Index: {current}/{total}")
+            self._indexing_label.setVisible(True)
+        else:
+            self._indexing_label.setVisible(False)
+
+    def _on_import_progress(self, current: int, total: int) -> None:
+        if total > 0:
+            self._import_progress.setVisible(True)
+            self._import_progress.setRange(0, total)
+            self._import_progress.setValue(current)
+            if current >= total:
+                self._import_progress.setVisible(False)
 
 
 def run_ui(app_name: str, vm: MainViewModel, signals: MainSignals) -> int:

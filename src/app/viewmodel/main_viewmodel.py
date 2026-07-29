@@ -219,14 +219,15 @@ class MainViewModel:
                         id=r["file_id"],
                         file_name=r["file_name"],
                         full_path=r["full_path"],
-                        file_hash="",
-                        created_at=0,
-                        updated_at=0,
+                        file_hash=r.get("file_hash", ""),
+                        created_at=r.get("created_at", 0),
+                        updated_at=r.get("updated_at", 0),
                         file_ext=r["file_ext"],
                         file_size=r["file_size"],
-                        create_time=r.get("modify_time", 0),
-                        modify_time=r.get("modify_time", 0),
-                        is_deleted=False,
+                        create_time=r.get("create_time", r.get("modify_time", 0)),
+                        modify_time=r["modify_time"],
+                        is_deleted=bool(r.get("is_deleted", 0)),
+                        deleted_at=r.get("deleted_at"),
                     )
                     for r in fts_rows
                 ]
@@ -318,12 +319,15 @@ class MainViewModel:
         if not candidates_list:
             return 0
         if getattr(self, '_import_worker', None) is not None:
+            logger.warning("Import already in progress, ignoring duplicate call")
             return 0
         worker = ImportWorker(self._db, candidates_list)
         worker.progress.connect(lambda c, t: self.signals.import_progress.emit(c, t))
         worker.finished.connect(lambda: self.signals.files_updated.emit([]))
         worker.finished.connect(worker.deleteLater)
         worker.finished.connect(lambda: setattr(self, '_import_worker', None))
+        if self._index_worker is not None:
+            worker.file_imported.connect(lambda fid, fp: self._index_worker.enqueue(fid, Path(fp)))
         self._import_worker = worker
         worker.run()
         return 0

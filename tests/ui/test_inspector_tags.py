@@ -54,6 +54,8 @@ class MockSignals:
     def __init__(self):
         self.files_updated = self.MockSignal()
         self.tags_updated = self.MockSignal()
+        self.indexing_progress = self.MockSignal()
+        self.import_progress = self.MockSignal()
 
 def test_inspector_tags(app):
     mock_vm = MockVM()
