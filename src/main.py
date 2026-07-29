@@ -59,7 +59,6 @@ def main() -> int:
             watch_dirs.add(p)
     if watch_dirs:
         file_monitor.start(list(watch_dirs))
-        file_monitor.run()
 
     # Connect FileMonitor to ViewModel
     file_monitor.file_system_changed.connect(vm._on_file_system_changed)
