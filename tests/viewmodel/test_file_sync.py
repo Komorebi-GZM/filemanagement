@@ -1,5 +1,6 @@
 import pathlib
 import tempfile
+import time
 import pytest
 from pathlib import Path
 from src.app.db.database import Database, apply_schema, load_schema_text
@@ -28,6 +29,7 @@ class TestFileSync:
         src.write_text("hello")
         candidates = [ImportCandidate(path=src, size=src.stat().st_size)]
         vm.import_files(candidates)
+        time.sleep(0.5)
         records = vm.list_files()
         assert len(records) == 1
         file_hash = records[0].file_hash
@@ -46,6 +48,7 @@ class TestFileSync:
         f.write_text("delete me")
         candidates = [ImportCandidate(path=f, size=f.stat().st_size)]
         vm.import_files(candidates)
+        time.sleep(0.5)
         file_hash = vm.list_files()[0].file_hash
 
         vm._handle_file_deleted_by_path(str(f.resolve()))
@@ -56,6 +59,7 @@ class TestFileSync:
         f.write_text("v1")
         candidates = [ImportCandidate(path=f, size=f.stat().st_size)]
         vm.import_files(candidates)
+        time.sleep(0.5)
         records = vm.list_files()
         file_hash = records[0].file_hash
         old_size = records[0].file_size
@@ -80,6 +84,7 @@ class TestFileSync:
             ImportCandidate(path=f2, size=f2.stat().st_size),
         ]
         vm.import_files(candidates)
+        time.sleep(0.5)
         records = {r.file_name: r for r in vm.list_files()}
 
         events = [

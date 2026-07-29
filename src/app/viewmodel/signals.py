@@ -11,3 +11,5 @@ class MainSignals(QObject):
     file_untagged = pyqtSignal(int, int)  # file_id, tag_id
     file_note_updated = pyqtSignal(int)  # file_id
     file_imprint_added = pyqtSignal(int)  # file_id
+    indexing_progress = pyqtSignal(int, int)  # current, total
+    import_progress = pyqtSignal(int, int)    # current, total

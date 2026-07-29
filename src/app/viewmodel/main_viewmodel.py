@@ -283,77 +283,20 @@ class MainViewModel:
         return candidates
 
     def import_files(self, candidates: Iterable[ImportCandidate]) -> int:
-        """
-        导入文件到系统
-        
-        Args:
-            candidates: 候选文件列表
-            
-        Returns:
-            新导入的文件数量
-        """
-        now = int(time.time())
-        inserted = 0
-        with self._db.connect() as conn:
-            for c in candidates:
-                file_hash = sha256_file(c.path)
-                file_name = c.path.name
-                file_ext = c.path.suffix.lower().lstrip(".") if c.path.suffix else None
-                full_path = str(c.path.resolve())
-                try:
-                    st = c.path.stat()
-                except OSError:
-                    continue
-
-                # Upsert by file_hash
-                row = conn.execute("SELECT id FROM files WHERE file_hash = ?", (file_hash,)).fetchone()
-                if row is None:
-                    conn.execute(
-                        """
-                        INSERT INTO files (
-                          file_name, file_ext, full_path, file_size, create_time, modify_time,
-                          file_hash, is_deleted, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-                        """,
-                        (
-                            file_name,
-                            file_ext,
-                            full_path,
-                            int(st.st_size),
-                            int(st.st_ctime),
-                            int(st.st_mtime),
-                            file_hash,
-                            now,
-                            now,
-                        ),
-                    )
-                    inserted += 1
-                else:
-                    conn.execute(
-                        """
-                        UPDATE files
-                        SET file_name = ?, file_ext = ?, full_path = ?, file_size = ?, create_time = ?, modify_time = ?,
-                            is_deleted = 0, deleted_at = NULL, updated_at = ?
-                        WHERE file_hash = ?
-                        """,
-                        (
-                            file_name,
-                            file_ext,
-                            full_path,
-                            int(st.st_size),
-                            int(st.st_ctime),
-                            int(st.st_mtime),
-                            now,
-                            file_hash,
-                        ),
-                    )
-
-            conn.commit()
-
-        self.signals.files_updated.emit([])
-        # self.signals.status_message.emit(f"导入完成：新增 {inserted} 个文件")
-        logger.info("Import finished: inserted=%s", inserted)
-        return inserted
+        from src.app.services.import_worker import ImportWorker
+        candidates_list = list(candidates)
+        if not candidates_list:
+            return 0
+        if getattr(self, '_import_worker', None) is not None:
+            return 0
+        worker = ImportWorker(self._db, candidates_list)
+        worker.progress.connect(lambda c, t: self.signals.import_progress.emit(c, t))
+        worker.finished.connect(lambda: self.signals.files_updated.emit([]))
+        worker.finished.connect(worker.deleteLater)
+        worker.finished.connect(lambda: setattr(self, '_import_worker', None))
+        self._import_worker = worker
+        worker.run()
+        return 0
 
     def create_tag(self, tag_name: str, tag_type: Optional[str] = None, parent_id: Optional[int] = None) -> Tag:
         """
