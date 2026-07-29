@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
+import time
+from typing import Optional
 
 
 class DbError(RuntimeError):
@@ -38,6 +40,106 @@ class Database:
                 (tag_id,),
             ).fetchone()
             return row[0] if row else 0
+
+    def find_by_hash(self, file_hash: str) -> Optional[dict]:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, file_name, full_path FROM files
+                WHERE file_hash = ? AND is_deleted = 0
+                """,
+                (file_hash,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def find_by_path_and_size(self, full_path: str, file_size: int) -> Optional[int]:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id FROM files
+                WHERE full_path = ? AND file_size = ? AND is_deleted = 0
+                LIMIT 1
+                """,
+                (full_path, file_size),
+            ).fetchone()
+        return row["id"] if row else None
+
+    def update_file_path(self, file_id: int, new_path: str, new_name: str, new_ext: str) -> None:
+        now = int(time.time())
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE files
+                SET full_path = ?, file_name = ?, file_ext = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (new_path, new_name, new_ext, now, file_id),
+            )
+            conn.commit()
+
+    def soft_delete_by_hash(self, file_hash: str) -> None:
+        now = int(time.time())
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE files
+                SET is_deleted = 1, deleted_at = ?, updated_at = ?
+                WHERE file_hash = ? AND is_deleted = 0
+                """,
+                (now, now, file_hash),
+            )
+            conn.commit()
+
+    def update_file_meta(self, file_id: int, file_size: int, modify_time: int) -> None:
+        now = int(time.time())
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE files
+                SET file_size = ?, modify_time = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (file_size, modify_time, now, file_id),
+            )
+            conn.commit()
+
+    def record_search(self, query_json: str, timestamp: int) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO search_history (query_json, created_at) VALUES (?, ?)",
+                (query_json, timestamp),
+            )
+            conn.commit()
+
+    def get_recent_searches(self, limit: int = 10) -> list[dict]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, query_json, created_at
+                FROM search_history
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_old_searches(self, max_keep: int = 50) -> None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id FROM search_history
+                ORDER BY created_at DESC
+                LIMIT 1 OFFSET ?
+                """,
+                (max_keep,),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "DELETE FROM search_history WHERE id <= ?",
+                    (row["id"],),
+                )
+                conn.commit()
 
 
 
