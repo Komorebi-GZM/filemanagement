@@ -777,6 +777,13 @@ class MainViewModel:
                         row = self._db.find_by_hash(file_hash)
                         if row:
                             file_id = row["id"]
+                    if file_id is None:
+                        with self._db.connect() as conn:
+                            row = conn.execute(
+                                "SELECT id FROM files WHERE full_path = ? AND is_deleted = 0 LIMIT 1",
+                                (ev.src_path,),
+                            ).fetchone()
+                            file_id = row["id"] if row else None
                     if file_id is not None:
                         self._handle_file_modified(file_id, int(st.st_size), int(st.st_mtime))
                         updated = True
