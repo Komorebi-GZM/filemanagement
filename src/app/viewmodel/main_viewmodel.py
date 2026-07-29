@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import time
@@ -8,7 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
-from src.app.db.database import Database
+from src.app.db.database import Database, DbError
+from src.app.services.file_monitor import FileEvent
 from src.app.model.file_record import FileRecord
 from src.app.model.tag import Tag
 from src.app.viewmodel.signals import MainSignals
@@ -76,6 +78,7 @@ class MainViewModel:
         """
         self._db = db
         self.signals = signals
+        self._auto_import = False
 
     @property
     def db(self) -> Optional[Database]:
@@ -230,6 +233,8 @@ class MainViewModel:
                 """,
                 (search_pattern, search_pattern, limit),
             ).fetchall()
+        if query:
+            self.record_search(query)
         return [
             FileRecord(
                 id=r["id"],
@@ -743,18 +748,104 @@ class MainViewModel:
         return [t for t in all_tags if query.lower() in (t.tag_name or "").lower()]
 
     def count_files(self, tag_id: Optional[int] = None) -> int:
-        """
-        获取文件数量
-        
-        Args:
-            tag_id: 按标记筛选的文件数量，None表示所有未删除文件数量
-            
-        Returns:
-            文件数量
-        """
         if self._db is None:
             return 0
-        if tag_id is None:
-            return self._db.count_all_files()
-        return self._db.count_files_by_tag(tag_id)
+        try:
+            if tag_id is None:
+                return self._db.count_all_files()
+            return self._db.count_files_by_tag(tag_id)
+        except DbError:
+            logger.error("Failed to count files", exc_info=True)
+            return 0
+
+    def _on_file_system_changed(self, events: list[FileEvent]) -> None:
+        updated = False
+        for ev in events:
+            if ev.event_type == "modified":
+                p = Path(ev.src_path)
+                if p.exists():
+                    try:
+                        st = p.stat()
+                    except OSError:
+                        continue
+                    file_id = self._db.find_by_path_and_size(ev.src_path, int(st.st_size))
+                    if file_id is None:
+                        try:
+                            file_hash = sha256_file(p)
+                        except FileReadError:
+                            continue
+                        row = self._db.find_by_hash(file_hash)
+                        if row:
+                            file_id = row["id"]
+                    if file_id is not None:
+                        self._handle_file_modified(file_id, int(st.st_size), int(st.st_mtime))
+                        updated = True
+            elif ev.event_type == "deleted":
+                self._handle_file_deleted_by_path(ev.src_path)
+                updated = True
+            elif ev.event_type == "moved":
+                new_path = Path(ev.dest_path)
+                if new_path.exists():
+                    try:
+                        file_hash = sha256_file(new_path)
+                    except FileReadError:
+                        continue
+                    self._handle_file_moved(file_hash, ev.dest_path)
+                    updated = True
+            elif ev.event_type == "created":
+                if self._auto_import:
+                    p = Path(ev.src_path)
+                    if p.exists():
+                        try:
+                            st = p.stat()
+                        except OSError:
+                            continue
+                        cand = ImportCandidate(path=p, size=int(st.st_size))
+                        self.import_files([cand])
+                        updated = True
+        if updated:
+            self.signals.files_updated.emit([])
+
+    def _handle_file_moved(self, file_hash: str, new_full_path: str) -> None:
+        row = self._db.find_by_hash(file_hash)
+        if row is None:
+            return
+        p = Path(new_full_path)
+        self._db.update_file_path(
+            file_id=row["id"],
+            new_path=new_full_path,
+            new_name=p.name,
+            new_ext=p.suffix.lower().lstrip(".") if p.suffix else None,
+        )
+
+    def _handle_file_deleted_by_path(self, full_path: str) -> None:
+        with self._db.connect() as conn:
+            row = conn.execute(
+                "SELECT id, file_size FROM files WHERE full_path = ? AND is_deleted = 0 LIMIT 1",
+                (full_path,),
+            ).fetchone()
+            if row:
+                now = int(time.time())
+                conn.execute(
+                    "UPDATE files SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ?",
+                    (now, now, row["id"]),
+                )
+                conn.commit()
+
+    def _handle_file_modified(self, file_id: int, file_size: int, modify_time: int) -> None:
+        self._db.update_file_meta(file_id, file_size, modify_time)
+
+    def record_search(self, query: str) -> None:
+        if not query:
+            return
+        now = int(time.time())
+        payload = json.dumps({"query": query, "timestamp": now})
+        self._db.record_search(payload, now)
+        self._db.delete_old_searches(max_keep=50)
+
+    def get_recent_searches(self, limit: int = 10) -> list[dict]:
+        return self._db.get_recent_searches(limit)
+
+    def set_auto_import(self, enabled: bool) -> None:
+        self._auto_import = enabled
 

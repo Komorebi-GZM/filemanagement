@@ -3,6 +3,8 @@ import pathlib
 import tempfile
 import pytest
 from src.app.db.database import Database, apply_schema, load_schema_text
+from src.app.viewmodel.main_viewmodel import MainViewModel
+from src.app.viewmodel.signals import MainSignals
 
 
 class TestSearchHistory:
@@ -150,3 +152,36 @@ class TestSearchHistory:
         assert row["file_size"] == 999
         assert row["modify_time"] == 2000
         conn.close()
+
+
+class TestViewModelSearchHistory:
+    def test_search_writes_history(self, vm):
+        vm.search_files(query="test_query")
+        history = vm.get_recent_searches(limit=10)
+        assert len(history) >= 1
+        assert "test_query" in history[0]["query_json"]
+
+    def test_search_without_query_does_not_write(self, vm):
+        vm.search_files(query="")
+        history = vm.get_recent_searches(limit=10)
+        assert len(history) == 0
+
+    def test_auto_cleanup(self, vm):
+        for i in range(60):
+            vm.record_search(f"q{i}")
+        history = vm.get_recent_searches(limit=100)
+        assert len(history) <= 50
+
+    @pytest.fixture
+    def vm(self):
+        import tempfile
+        tf = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        db_path = tf.name
+        tf.close()
+        db = Database(db_path)
+        schema_path = pathlib.Path(__file__).parents[2] / "src" / "app" / "db" / "schema.sql"
+        conn = db.connect()
+        apply_schema(conn, load_schema_text(schema_path))
+        conn.close()
+        v = MainViewModel(db=db, signals=MainSignals())
+        return v
