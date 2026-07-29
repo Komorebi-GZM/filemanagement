@@ -38,7 +38,9 @@ class TagChipWidget(QWidget):
         layout.addWidget(self.label)
         layout.addWidget(self.remove_btn)
         
-        self.setStyleSheet("TagChipWidget { background-color: #e0e0e0; border-radius: 4px; border: 1px solid #ccc; }")
+        bg = self.palette().color(QPalette.Window).name()
+        border = self.palette().color(QPalette.Mid).name()
+        self.setStyleSheet(f"TagChipWidget {{ background-color: {bg}; border-radius: 4px; border: 1px solid {border}; }}")
 
 
 class FileListWidget(QListWidget):
@@ -76,8 +78,6 @@ class FileListWidget(QListWidget):
         if not selected_items:
             return
         
-        # 确认删除
-        from PyQt5.QtWidgets import QMessageBox
         reply = QMessageBox.question(
             self, "确认删除", f"确定要删除选中的 {len(selected_items)} 个文件吗？",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
@@ -168,8 +168,6 @@ class TagTreeWidget(QTreeWidget):
                             self.main_window.vm.add_tag_to_file(file_id, tag_id)
                         except ValueError:
                             pass
-                    # 显示成功提示
-                    from PyQt5.QtWidgets import QMessageBox
                     QMessageBox.information(self, "标记成功", f"已为 {len(file_ids)} 个文件添加标签")
             event.accept()
         else:
@@ -239,7 +237,7 @@ class MainWindow(QMainWindow):
         self.vm = vm
         self.signals = signals
         
-        self.command_palette = CommandPalette(self)
+        self.command_palette = CommandPalette(self, self.vm)
         self.command_palette.hide()
         self.command_palette.tag_selected_for_file.connect(self._on_tag_selected_for_file)
 
@@ -374,6 +372,9 @@ class MainWindow(QMainWindow):
     
     def toggle_command_palette(self):
         if self.command_palette.isHidden():
+            if not self.file_list.selectedItems():
+                recent = self.vm.get_recent_searches(10) if self.vm else []
+                self.command_palette.set_history(recent)
             self.command_palette.show()
             self.command_palette.search_box.setFocus()
         else:
@@ -637,8 +638,6 @@ class MainWindow(QMainWindow):
                 item = self.tags_layout.takeAt(0)
                 if item.widget():
                     item.widget().deleteLater()
-                elif item.spacerItem():
-                    self.tags_layout.removeItem(item.spacerItem())
             
             tags = self.vm.get_file_tags(file.id)
             if tags:
@@ -653,13 +652,8 @@ class MainWindow(QMainWindow):
             self.tags_layout.addWidget(plus_btn)
             self.tags_layout.addStretch()
             
-            # 文件注释
             note = self.vm.get_file_note(file.id)
             preview_content.append("\n注释:")
-            preview_content.append(note or "无")
-            
-            # 文件简介（这里使用注释作为简介，因为它们在功能上是相同的）
-            preview_content.append("\n简介:")
             preview_content.append(note or "无")
             
             # 对于文本文件，添加文件内容预览
@@ -678,11 +672,15 @@ class MainWindow(QMainWindow):
             elif file.file_name.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".bmp")):
                 image = QImage(file.full_path)
                 if not image.isNull():
-                    # 调整图片大小以适应预览窗口
-                    scaled_image = image.scaled(self.file_preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                    self.file_preview.setPixmap(scaled_image)
-                    # 在图片下方显示文件信息
-                    self.file_preview.append("\n" + "\n".join(preview_content))
+                    from PyQt5.QtCore import QBuffer, QByteArray
+                    scaled = image.scaled(self.file_preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    buffer = QBuffer()
+                    buffer.open(QBuffer.ReadWrite)
+                    scaled.save(buffer, "PNG")
+                    b64 = buffer.data().toBase64().data().decode()
+                    html = f'<img src="data:image/png;base64,{b64}"><br>' + "<br>".join(preview_content)
+                    self.file_preview.setHtml(html)
+                    buffer.close()
                     return
                 else:
                     preview_content.append("\n图片预览: 无法加载")
@@ -694,10 +692,8 @@ class MainWindow(QMainWindow):
 
 
     def _remove_file_tag(self, file_id: int, tag_id: int):
-        if hasattr(self.vm, "remove_file_tag"):
-            self.vm.remove_file_tag(file_id, tag_id)
-        elif hasattr(self.vm, "remove_tag_from_file"):
-            self.vm.remove_tag_from_file(file_id, tag_id)
+        self.vm.remove_tag_from_file(file_id, tag_id)
+        self._update_tag_tree()
         self._on_file_selected()
 
     def _on_add_tag_btn_clicked(self, file_id: int, file_name: str):
@@ -705,11 +701,9 @@ class MainWindow(QMainWindow):
         self.toggle_command_palette()
 
     def _on_tag_selected_for_file(self, file_id: int, tag_id: int):
-        if hasattr(self.vm, "add_file_tag"):
-            self.vm.add_file_tag(file_id, tag_id)
-        elif hasattr(self.vm, "add_tag_to_file"):
-            self.vm.add_tag_to_file(file_id, tag_id)
+        self.vm.add_tag_to_file(file_id, tag_id)
         self.command_palette.set_context_file(None, "")
+        self._update_tag_tree()
         self._on_file_selected()
 
 

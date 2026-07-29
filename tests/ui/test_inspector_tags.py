@@ -24,12 +24,12 @@ class MockVM:
             return [Tag(id=101, tag_name="test_tag", created_at=0, updated_at=0, parent_id=None)]
         return []
     
-    def remove_file_tag(self, file_id, tag_id):
+    def remove_tag_from_file(self, file_id, tag_id):
         self.tags_removed.append((file_id, tag_id))
         
-    def add_file_tag(self, file_id, tag_id):
-        self.tags_added.append((file_id, tag_id))
-        
+    def get_recent_searches(self, limit=10):
+        return []
+
     def add_tag_to_file(self, file_id, tag_id):
         self.tags_added.append((file_id, tag_id))
 
@@ -104,7 +104,7 @@ def test_inspector_tags(app):
     assert item.data(Qt.UserRole) == 101
     
     # Verify emitting tag selection
-    main_window.command_palette._on_item_activated(item)
+    main_window.command_palette.list_widget.itemActivated.emit(item)
     assert (1, 101) in mock_vm.tags_added
     assert main_window.command_palette.isHidden() == True
     
