@@ -24,6 +24,7 @@ class CommandPalette(QWidget):
 
         self.list_widget.itemActivated.connect(self._on_item_activated)
         self.search_box.textChanged.connect(self._on_text_changed)
+        self.search_box.returnPressed.connect(self._on_return_pressed)
         self.search_box.installEventFilter(self)
 
     def set_context_file(self, file_id: int, file_name: str):
@@ -101,6 +102,11 @@ class CommandPalette(QWidget):
                 item = QListWidgetItem(tag.tag_name)
                 item.setData(Qt.UserRole, tag.id)
                 self.list_widget.addItem(item)
+
+    def _on_return_pressed(self):
+        text = self.search_box.text().strip()
+        if text:
+            self.text_entered.emit(text)
 
     def _on_item_activated(self, item):
         if self.context_file_id is not None:

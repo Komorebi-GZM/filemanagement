@@ -34,3 +34,24 @@
 **决策记录：**
 - 会话记录文件命名为 `SESSION_RECORD.md`，置于项目根目录
 - 记录格式采用 Markdown 二级标题 + 关键字段（背景/完成工作/当前状态/待办事项/决策记录）
+
+## [2026-07-29] V1.2 代码审查发现修复
+
+**背景：** V1.2 分支最终 review 发现 4 个需修复的 findings
+
+**完成工作：**
+- CRITICAL #1: `_on_file_system_changed` 添加 `self._db is None` 守卫
+- IMPORTANT #3: Command palette 的 `search_box.returnPressed` 连接发射 `text_entered` 信号，`main_window.py` 连接该信号到 `_execute_search` 方法
+- IMPORTANT #4: `delete_old_searches` 改用 `ORDER BY created_at DESC, id DESC` + id 比较，避免 id 间隙问题和同时间戳边缘情况
+- IMPORTANT #5: SKIPPED（删除事件无法获取文件大小，path-only 匹配是正确方案）
+- IMPORTANT #7: `_handle_file_deleted_by_path` 改为查询 hash 后调用 `self._db.soft_delete_by_hash()`，消除死代码
+
+**当前状态：**
+- 37 passed, 4 skipped（全部通过）
+- 4 文件修改：`database.py`, `command_palette.py`, `main_window.py`, `main_viewmodel.py`
+
+**待办事项：**
+- （无新增）
+
+**决策记录：**
+- `delete_old_searches` 不直接用 `created_at` 比较（同时间戳边缘情况），而是 `ORDER BY created_at DESC, id DESC` + `DELETE WHERE id <= ?`，兼顾语义正确性和稳定性

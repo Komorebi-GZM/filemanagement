@@ -759,6 +759,8 @@ class MainViewModel:
             return 0
 
     def _on_file_system_changed(self, events: list[FileEvent]) -> None:
+        if self._db is None:
+            return
         updated = False
         for ev in events:
             if ev.event_type == "modified":
@@ -828,16 +830,11 @@ class MainViewModel:
     def _handle_file_deleted_by_path(self, full_path: str) -> None:
         with self._db.connect() as conn:
             row = conn.execute(
-                "SELECT id, file_size FROM files WHERE full_path = ? AND is_deleted = 0 LIMIT 1",
+                "SELECT file_hash FROM files WHERE full_path = ? AND is_deleted = 0 LIMIT 1",
                 (full_path,),
             ).fetchone()
-            if row:
-                now = int(time.time())
-                conn.execute(
-                    "UPDATE files SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ?",
-                    (now, now, row["id"]),
-                )
-                conn.commit()
+        if row:
+            self._db.soft_delete_by_hash(row["file_hash"])
 
     def _handle_file_modified(self, file_id: int, file_size: int, modify_time: int) -> None:
         self._db.update_file_meta(file_id, file_size, modify_time)

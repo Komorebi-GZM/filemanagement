@@ -240,6 +240,7 @@ class MainWindow(QMainWindow):
         self.command_palette = CommandPalette(self, self.vm)
         self.command_palette.hide()
         self.command_palette.tag_selected_for_file.connect(self._on_tag_selected_for_file)
+        self.command_palette.text_entered.connect(self._execute_search)
 
         self.shortcut_k = QShortcut(QKeySequence("Ctrl+K"), self)
         self.shortcut_k.activated.connect(self.toggle_command_palette)
@@ -488,10 +489,13 @@ class MainWindow(QMainWindow):
         
         self.tag_tree.expandAll()
     
-    def _on_search(self):
-        query = self.search_input.text()
+    def _execute_search(self, query: str):
+        self.search_input.setText(query)
         files = self.vm.search_files(query)
         self._update_file_list(files)
+
+    def _on_search(self):
+        self._execute_search(self.search_input.text())
     
     def _on_sort(self):
         # 切换排序顺序

@@ -129,7 +129,7 @@ class Database:
             row = conn.execute(
                 """
                 SELECT id FROM search_history
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT 1 OFFSET ?
                 """,
                 (max_keep,),
