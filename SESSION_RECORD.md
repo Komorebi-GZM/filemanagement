@@ -35,23 +35,35 @@
 - 会话记录文件命名为 `SESSION_RECORD.md`，置于项目根目录
 - 记录格式采用 Markdown 二级标题 + 关键字段（背景/完成工作/当前状态/待办事项/决策记录）
 
-## [2026-07-29] V1.2 代码审查发现修复
+## [2026-07-29] V1.2 设计 + 实现
 
-**背景：** V1.2 分支最终 review 发现 4 个需修复的 findings
+**背景：** 完成 V1.2 版本的设计、实现、测试和发布
 
 **完成工作：**
-- CRITICAL #1: `_on_file_system_changed` 添加 `self._db is None` 守卫
-- IMPORTANT #3: Command palette 的 `search_box.returnPressed` 连接发射 `text_entered` 信号，`main_window.py` 连接该信号到 `_execute_search` 方法
-- IMPORTANT #4: `delete_old_searches` 改用 `ORDER BY created_at DESC, id DESC` + id 比较，避免 id 间隙问题和同时间戳边缘情况
-- IMPORTANT #5: SKIPPED（删除事件无法获取文件大小，path-only 匹配是正确方案）
-- IMPORTANT #7: `_handle_file_deleted_by_path` 改为查询 hash 后调用 `self._db.soft_delete_by_hash()`，消除死代码
+- 编写 V1.2 PRD：watchdog 文件监控（P0）+ search_history 写入（P1）
+- 编写实现计划（6 个 Task）
+- 实现并审查 6 个 Task：
+  - Task 1: FileMonitor 服务层（QTimer debounce + watchdog Observer）
+  - Task 2: Database 方法（find_by_hash, update_file_path, record_search 等 8 方法）
+  - Task 3: ViewModel 事件处理 + search_history 写入
+  - Task 4: Command palette ↑/↓ 历史导航
+  - Task 5: main.py 集成 FileMonitor 生命周期
+  - Task 6: 集成测试
+- 最终 review 修复：_db None guard、command palette 搜索执行、delete_old_searches 排序、消除 dead code
+- Push 到 origin/master (9f2144a..cabb400)
 
 **当前状态：**
 - 37 passed, 4 skipped（全部通过）
-- 4 文件修改：`database.py`, `command_palette.py`, `main_window.py`, `main_viewmodel.py`
+- 新增文件：`src/app/services/`、`src/app/services/file_monitor.py`、`tests/services/test_file_monitor.py`、`tests/services/test_file_monitor_integration.py`
+- 修改文件：`database.py`、`main_viewmodel.py`、`command_palette.py`、`main_window.py`、`main.py`
+- 测试文件：`test_file_sync.py`、`test_search_history.py`、`test_command_palette.py`
+- V1.2 已推送到 origin/master
 
 **待办事项：**
-- （无新增）
+- V1.3：全文搜索（FTS）推迟至 V1.3
+- V1.2 遗留：SHA256 计算在主线程阻塞 UI（已知问题，后续优化）
 
 **决策记录：**
-- `delete_old_searches` 不直接用 `created_at` 比较（同时间戳边缘情况），而是 `ORDER BY created_at DESC, id DESC` + `DELETE WHERE id <= ?`，兼顾语义正确性和稳定性
+- 数据库 Schema 不变，不增加 inode 字段（跨平台不可靠，file_hash 已足够）
+- `delete_old_searches` 采用 `ORDER BY created_at DESC, id DESC` + `DELETE WHERE id <= ?` 而非纯 `created_at` 比较（处理同时间戳边缘情况）
+- 删除事件 path-only 匹配是正确方案（文件已消失，无法获取 size）

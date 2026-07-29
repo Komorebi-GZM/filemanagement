@@ -19,13 +19,13 @@ EXTENSIONS_XLSX = {".xlsx"}
 def extract_text(path: Path, file_ext: str) -> str:
     ext = f".{file_ext.lstrip('.').lower()}"
     if ext in EXTENSIONS_TXT:
-        return extract_txt(path)
+        return _run_with_timeout(extract_txt, path)
     if ext in EXTENSIONS_PDF:
-        return extract_pdf(path)
+        return _run_with_timeout(extract_pdf, path)
     if ext in EXTENSIONS_DOCX:
-        return extract_docx(path)
+        return _run_with_timeout(extract_docx, path)
     if ext in EXTENSIONS_XLSX:
-        return extract_xlsx(path)
+        return _run_with_timeout(extract_xlsx, path)
     return ""
 
 def _run_with_timeout(fn, path: Path, timeout: float = EXTRACT_TIMEOUT):
@@ -41,22 +41,26 @@ def _run_with_timeout(fn, path: Path, timeout: float = EXTRACT_TIMEOUT):
             return ""
 
 def extract_txt(path: Path) -> str:
-    if path.stat().st_size > MAX_FILE_SIZE:
-        return ""
-    sample = _read_sample(path)
-    encoding = _detect_encoding(sample)
     try:
-        text = path.read_text(encoding=encoding, errors="replace")
-    except (LookupError, UnicodeDecodeError):
-        for enc in DEFAULT_ENCODINGS:
-            try:
-                text = path.read_text(encoding=enc, errors="replace")
-                break
-            except (UnicodeDecodeError, LookupError):
-                continue
-        else:
+        if path.stat().st_size > MAX_FILE_SIZE:
             return ""
-    return text[:MAX_TEXT_LENGTH]
+        sample = _read_sample(path)
+        encoding = _detect_encoding(sample)
+        try:
+            text = path.read_text(encoding=encoding, errors="replace")
+        except (LookupError, UnicodeDecodeError):
+            for enc in DEFAULT_ENCODINGS:
+                try:
+                    text = path.read_text(encoding=enc, errors="replace")
+                    break
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            else:
+                return ""
+        return text[:MAX_TEXT_LENGTH]
+    except Exception:
+        logger.exception("TXT extraction failed: %s", path)
+        return ""
 
 def _read_sample(path: Path) -> bytes:
     with path.open("rb") as f:
@@ -68,21 +72,25 @@ def _detect_encoding(sample: bytes) -> str:
 
 def extract_pdf(path: Path) -> str:
     import fitz
-    if path.stat().st_size > MAX_FILE_SIZE:
-        return ""
-    text_pages = []
     try:
-        doc = fitz.open(str(path))
-        for page in doc:
-            text_pages.append(page.get_text())
-        doc.close()
+        if path.stat().st_size > MAX_FILE_SIZE:
+            return ""
+        text_pages = []
+        try:
+            doc = fitz.open(str(path))
+            for page in doc:
+                text_pages.append(page.get_text())
+            doc.close()
+        except Exception:
+            logger.exception("PDF extraction failed: %s", path)
+            return ""
+        full = " ".join(text_pages)
+        if len(full.strip()) < 50:
+            return ""
+        return full[:MAX_TEXT_LENGTH]
     except Exception:
         logger.exception("PDF extraction failed: %s", path)
         return ""
-    full = " ".join(text_pages)
-    if len(full.strip()) < 50:
-        return ""
-    return full[:MAX_TEXT_LENGTH]
 
 def extract_docx(path: Path) -> str:
     from docx import Document

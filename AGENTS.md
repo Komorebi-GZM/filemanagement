@@ -10,7 +10,7 @@
 |------|------|
 | 运行应用 | `conda run -n py311-pack python -m src.main` |
 | 安装依赖 | `pip install -r requirements.txt` |
-| 运行全部测试 | `pytest` |
+| 运行全部测试 | `conda run -n py311-pack python -m pytest` |
 | 运行单个测试 | `pytest tests/path/to/test.py -k test_name` |
 | 打包 exe | `package.bat`（需 `py311-pack` conda 环境 + pyinstaller） |
 
@@ -26,6 +26,7 @@
 ## 架构要点
 
 - **MVVM 分层**：`src/app/model/`（数据类）→ `src/app/viewmodel/`（业务逻辑+信号）→ `src/app/ui/`（PyQt5 界面）
+- **Services 层**：`src/app/services/file_monitor.py` — FileMonitor(QObject) 封装 watchdog，通过 QTimer debounce + pyqtSignal 与 ViewModel 解耦
 - **数据库表**：`files`、`tags`、`file_tag_relation`、`search_history`、`file_notes`、`file_imprints`
 - **路径解析**：`src/app/core/paths.py` 管理数据目录（`data/users/<user>/app.sqlite3`）
 - **PyInstaller 兼容**：`src/main.py` 通过 `sys.frozen` 和 `sys._MEIPASS` 处理打包后路径
