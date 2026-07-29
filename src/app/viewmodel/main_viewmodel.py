@@ -79,6 +79,7 @@ class MainViewModel:
         self._db = db
         self.signals = signals
         self._auto_import = False
+        self._index_worker = None
 
     @property
     def db(self) -> Optional[Database]:
@@ -206,52 +207,81 @@ class MainViewModel:
         return sorted(drives)
 
     def search_files(self, query: str = "", limit: int = 200) -> list[FileRecord]:
-        """
-        搜索文件
-        
-        Args:
-            query: 搜索关键词
-            limit: 返回结果的最大数量
-            
-        Returns:
-            符合搜索条件的文件记录列表
-        """
         with self._db.connect() as conn:
             if not query:
                 return self.list_files(limit)
-            
-            search_pattern = f"%{query}%"
-            rows = conn.execute(
-                """
-                SELECT id, file_name, file_ext, full_path, file_size, create_time, modify_time,
-                       file_hash, is_deleted, deleted_at, created_at, updated_at
-                FROM files
-                WHERE is_deleted = 0
-                  AND (file_name LIKE ? OR file_ext LIKE ?)
-                ORDER BY updated_at DESC
-                LIMIT ?
-                """,
-                (search_pattern, search_pattern, limit),
-            ).fetchall()
-        if query:
-            self.record_search(query)
-        return [
-            FileRecord(
-                id=r["id"],
-                file_name=r["file_name"],
-                full_path=r["full_path"],
-                file_hash=r["file_hash"],
-                created_at=r["created_at"],
-                updated_at=r["updated_at"],
-                file_ext=r["file_ext"],
-                file_size=r["file_size"],
-                create_time=r["create_time"],
-                modify_time=r["modify_time"],
-                is_deleted=bool(r["is_deleted"]),
-                deleted_at=r["deleted_at"],
-            )
-            for r in rows
-        ]
+
+            fts_results = []
+            try:
+                fts_rows = self._db.search_fts(conn, query, limit)
+                fts_results = [
+                    FileRecord(
+                        id=r["file_id"],
+                        file_name=r["file_name"],
+                        full_path=r["full_path"],
+                        file_hash="",
+                        created_at=0,
+                        updated_at=0,
+                        file_ext=r["file_ext"],
+                        file_size=r["file_size"],
+                        create_time=r.get("modify_time", 0),
+                        modify_time=r.get("modify_time", 0),
+                        is_deleted=False,
+                    )
+                    for r in fts_rows
+                ]
+            except Exception:
+                logger.exception("FTS search failed for query: %s", query)
+
+            fts_ids = {r.id for r in fts_results}
+            remaining = limit - len(fts_results)
+
+            like_results = []
+            if remaining > 0:
+                search_pattern = f"%{query}%"
+                if fts_ids:
+                    placeholders = ",".join("?" * len(fts_ids))
+                    rows = conn.execute(
+                        f"""SELECT id, file_name, file_ext, full_path, file_size,
+                                   create_time, modify_time, file_hash, is_deleted,
+                                   deleted_at, created_at, updated_at
+                            FROM files
+                            WHERE is_deleted = 0
+                              AND (file_name LIKE ? OR file_ext LIKE ?)
+                              AND id NOT IN ({placeholders})
+                            ORDER BY file_name ASC
+                            LIMIT ?""",
+                        (search_pattern, search_pattern, *list(fts_ids), remaining),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        """SELECT id, file_name, file_ext, full_path, file_size,
+                                  create_time, modify_time, file_hash, is_deleted,
+                                  deleted_at, created_at, updated_at
+                           FROM files
+                           WHERE is_deleted = 0
+                             AND (file_name LIKE ? OR file_ext LIKE ?)
+                           ORDER BY file_name ASC
+                           LIMIT ?""",
+                        (search_pattern, search_pattern, remaining),
+                    ).fetchall()
+                like_results = [
+                    FileRecord(
+                        id=r["id"], file_name=r["file_name"],
+                        full_path=r["full_path"], file_hash=r["file_hash"],
+                        created_at=r["created_at"], updated_at=r["updated_at"],
+                        file_ext=r["file_ext"], file_size=r["file_size"],
+                        create_time=r["create_time"], modify_time=r["modify_time"],
+                        is_deleted=bool(r["is_deleted"]),
+                        deleted_at=r["deleted_at"],
+                    )
+                    for r in rows
+                ]
+
+            results = fts_results + like_results
+            if query:
+                self.record_search(query)
+            return results
 
     def scan_candidates(self, paths: Sequence[Path]) -> list[ImportCandidate]:
         """
@@ -732,9 +762,24 @@ class MainViewModel:
                     if file_id is not None:
                         self._handle_file_modified(file_id, int(st.st_size), int(st.st_mtime))
                         updated = True
+                        if self._index_worker:
+                            ext = p.suffix.lower()
+                            if ext in {".txt", ".md", ".log", ".csv", ".pdf", ".docx", ".xlsx"}:
+                                self._index_worker.enqueue(file_id, p)
             elif ev.event_type == "deleted":
+                file_id = None
+                with self._db.connect() as conn:
+                    row = conn.execute(
+                        "SELECT id FROM files WHERE full_path = ? AND is_deleted = 0 LIMIT 1",
+                        (ev.src_path,),
+                    ).fetchone()
+                    if row:
+                        file_id = row["id"]
                 self._handle_file_deleted_by_path(ev.src_path)
                 updated = True
+                if file_id is not None and self._db is not None:
+                    with self._db.connect() as fts_conn:
+                        self._db.delete_fts(fts_conn, file_id)
             elif ev.event_type == "moved":
                 new_path = Path(ev.dest_path)
                 if new_path.exists():
@@ -742,8 +787,12 @@ class MainViewModel:
                         file_hash = sha256_file(new_path)
                     except FileReadError:
                         continue
-                    self._handle_file_moved(file_hash, ev.dest_path)
+                    file_id = self._handle_file_moved(file_hash, ev.dest_path)
                     updated = True
+                    if file_id is not None and self._index_worker:
+                        ext = new_path.suffix.lower()
+                        if ext in {".txt", ".md", ".log", ".csv", ".pdf", ".docx", ".xlsx"}:
+                            self._index_worker.enqueue(file_id, new_path)
             elif ev.event_type == "created":
                 if self._auto_import:
                     p = Path(ev.src_path)
@@ -758,10 +807,10 @@ class MainViewModel:
         if updated:
             self.signals.files_updated.emit([])
 
-    def _handle_file_moved(self, file_hash: str, new_full_path: str) -> None:
+    def _handle_file_moved(self, file_hash: str, new_full_path: str) -> Optional[int]:
         row = self._db.find_by_hash(file_hash)
         if row is None:
-            return
+            return None
         p = Path(new_full_path)
         self._db.update_file_path(
             file_id=row["id"],
@@ -769,6 +818,7 @@ class MainViewModel:
             new_name=p.name,
             new_ext=p.suffix.lower().lstrip(".") if p.suffix else None,
         )
+        return row["id"]
 
     def _handle_file_deleted_by_path(self, full_path: str) -> None:
         with self._db.connect() as conn:
@@ -795,4 +845,38 @@ class MainViewModel:
 
     def set_auto_import(self, enabled: bool) -> None:
         self._auto_import = enabled
+
+    def init_index_worker(self) -> None:
+        if self._db is None:
+            return
+        from src.app.services.index_worker import IndexWorker
+        self._index_worker = IndexWorker(self._db)
+        if self.signals:
+            self._index_worker.indexing_progress.connect(
+                lambda c, t: self.signals.indexing_progress.emit(c, t)
+            )
+        self._index_worker.start()
+
+    def start_progressive_indexing(self) -> None:
+        if self._db is None or self._index_worker is None:
+            return
+        conn = self._db.connect()
+        rows = conn.execute(
+            """SELECT f.id, f.full_path, f.file_ext FROM files f
+               LEFT JOIN file_content_status fcs ON f.id = fcs.file_id
+               WHERE f.is_deleted = 0
+                 AND (fcs.file_id IS NULL OR fcs.status = 'pending')
+               ORDER BY f.modify_time DESC"""
+        ).fetchall()
+        conn.close()
+        if not rows:
+            return
+        supported = {".txt", ".md", ".log", ".csv", ".pdf", ".docx", ".xlsx"}
+        items = []
+        for r in rows:
+            path = Path(r["full_path"])
+            if path.suffix.lower() in supported:
+                items.append((r["id"], path))
+        if items:
+            self._index_worker.enqueue_batch(items)
 

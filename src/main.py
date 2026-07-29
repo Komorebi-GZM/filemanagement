@@ -45,6 +45,8 @@ def main() -> int:
 
     signals = MainSignals()
     vm = MainViewModel(db=db, signals=signals)
+    vm.init_index_worker()
+    vm.start_progressive_indexing()
 
     # FileMonitor: watch all unique parent directories of imported files
     file_monitor = FileMonitor(debounce_ms=2000)
