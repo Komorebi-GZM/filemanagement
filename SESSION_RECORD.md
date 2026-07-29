@@ -67,3 +67,24 @@
 - 数据库 Schema 不变，不增加 inode 字段（跨平台不可靠，file_hash 已足够）
 - `delete_old_searches` 采用 `ORDER BY created_at DESC, id DESC` + `DELETE WHERE id <= ?` 而非纯 `created_at` 比较（处理同时间戳边缘情况）
 - 删除事件 path-only 匹配是正确方案（文件已消失，无法获取 size）
+
+## [2026-07-29] 实现 Task 3: IndexWorker — Background FTS Indexing
+
+**背景：** V1.3 Task 3 — 创建 IndexWorker 后台队列工作线程处理 FTS 索引
+
+**完成工作：**
+- 创建 `src/app/services/index_worker.py` — IndexWorker(QObject)，包含 enqueue / enqueue_batch / start / stop 接口
+- 3 个信号：indexing_progress, indexing_finished, index_updated
+- 创建 `tests/services/test_index_worker.py` — 2 个测试（单文件 + 批量）
+- 测试全部通过（2/2），完整套件 56 passed, 4 skipped
+
+**当前状态：**
+- IndexWorker 已实现并提交 (01405e1)
+- TDD 中发现并修复了 spec 中的 2 个 bug：内层循环空队列无限循环、_total=0 时过早触发 indexing_finished
+- 测试 fixture 改用 file-based SQLite 以支持跨线程连接
+
+**待办事项：**
+- 后续 Task：FTS 搜索 UI、结果展示、增量索引
+
+**决策记录：**
+- 测试 fixture 使用 tmp_path 文件数据库而非 :memory:（因为 IndexWorker 在后台线程创建独立 DB 连接，:memory: 数据库连接间不共享）
