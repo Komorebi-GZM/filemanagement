@@ -78,10 +78,6 @@ class FileMonitor(QObject):
             self._observer.schedule(h, str(d), recursive=True)
         self._observer.start()
 
-    def run(self) -> None:
-        """Start the observer thread. Alias for start()."""
-        self._observer.start()
-
     def stop(self) -> None:
         self._timer.stop()
         if self._observer.is_alive():
