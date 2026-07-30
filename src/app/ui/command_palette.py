@@ -1,6 +1,6 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QGraphicsDropShadowEffect
 from PyQt5.QtCore import pyqtSignal, Qt, QEvent
-from PyQt5.QtGui import QKeyEvent
+from PyQt5.QtGui import QKeyEvent, QColor
 
 
 class CommandPalette(QWidget):
@@ -15,12 +15,60 @@ class CommandPalette(QWidget):
         self._history_index = -1
         self._suppress_history_reset = False
 
+        self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setMinimumWidth(400)
+        self.setMaximumWidth(600)
+
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(24)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 40))
+        self.setGraphicsEffect(shadow)
+
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(4)
+
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("搜索命令...")
         self.list_widget = QListWidget()
         layout.addWidget(self.search_box)
         layout.addWidget(self.list_widget)
+
+        self.setStyleSheet("""
+            CommandPalette {
+                background: #FFFFFF;
+                border: 1px solid #E2E8F0;
+                border-radius: 10px;
+            }
+            QLineEdit {
+                border: 1px solid #E2E8F0;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border-color: #2563EB;
+            }
+            QListWidget {
+                border: none;
+                border-radius: 6px;
+                font-size: 13px;
+                outline: none;
+            }
+            QListWidget::item {
+                padding: 6px 10px;
+                border-radius: 4px;
+            }
+            QListWidget::item:hover {
+                background: #F1F5F9;
+            }
+            QListWidget::item:selected {
+                background: #DBEAFE;
+                color: #2563EB;
+            }
+        """)
 
         self.list_widget.itemActivated.connect(self._on_item_activated)
         self.search_box.textChanged.connect(self._on_text_changed)

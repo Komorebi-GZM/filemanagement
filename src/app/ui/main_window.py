@@ -5,21 +5,40 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from PyQt5.QtCore import Qt, QPoint, QRect, QMimeData
-from PyQt5.QtGui import QDrag, QImage, QPainter, QPalette, QBrush, QColor, QFontMetrics, QKeySequence
+from PyQt5.QtCore import Qt, QPoint, QRect, QMimeData, QFileInfo
+from PyQt5.QtGui import (
+    QDrag, QImage, QPainter, QPalette, QBrush, QColor, QFontMetrics, QKeySequence,
+    QIcon, QPixmap, QPen,
+)
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget,
     QTreeWidgetItem, QListWidget, QListWidgetItem, QLabel, QLineEdit, QPushButton,
     QSplitter, QMenu, QAction, QInputDialog, QMessageBox, QTabWidget,
-    QProgressBar, QTextEdit, QDateTimeEdit, QFormLayout, QDialog, QDialogButtonBox, QFileDialog, QComboBox,
-    QShortcut, QScrollArea, QSizePolicy
+    QProgressBar, QTextEdit, QDateTimeEdit, QFormLayout, QDialog, QDialogButtonBox,
+    QFileDialog, QComboBox, QShortcut, QScrollArea, QSizePolicy, QFileIconProvider,
+    QGraphicsDropShadowEffect,
 )
 
 from src.app.model.file_record import FileRecord
 from src.app.ui.command_palette import CommandPalette
+from src.app.ui.theme import setup_theme, tag_color
 from src.app.viewmodel.main_viewmodel import MainViewModel
 from src.app.viewmodel.signals import MainSignals
 
+
+
+def _search_icon() -> QIcon:
+    pixmap = QPixmap(18, 18)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    pen = QPen(QColor("#94A3B8"))
+    pen.setWidth(2)
+    painter.setPen(pen)
+    painter.drawEllipse(2, 3, 9, 9)
+    painter.drawLine(9, 10, 14, 15)
+    painter.end()
+    return QIcon(pixmap)
 
 
 class TagChipWidget(QWidget):
@@ -27,20 +46,29 @@ class TagChipWidget(QWidget):
         super().__init__(parent)
         self.tag_id = tag_id
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setContentsMargins(8, 3, 6, 3)
         layout.setSpacing(4)
-        
+
         self.label = QLabel(tag_name)
+        self.label.setStyleSheet("color: #FFFFFF; font-size: 12px; background: transparent;")
+
         self.remove_btn = QPushButton("×")
-        self.remove_btn.setFixedSize(16, 16)
-        self.remove_btn.setStyleSheet("QPushButton { border: none; font-weight: bold; } QPushButton:hover { color: red; }")
-        
+        self.remove_btn.setFixedSize(18, 18)
+        self.remove_btn.setCursor(Qt.PointingHandCursor)
+        self.remove_btn.setStyleSheet(
+            "QPushButton { border: none; font-weight: bold; color: rgba(255,255,255,0.7); "
+            "font-size: 14px; background: transparent; }"
+            "QPushButton:hover { color: #FFFFFF; }"
+        )
+
         layout.addWidget(self.label)
         layout.addWidget(self.remove_btn)
-        
-        bg = self.palette().color(QPalette.Window).name()
-        border = self.palette().color(QPalette.Mid).name()
-        self.setStyleSheet(f"TagChipWidget {{ background-color: {bg}; border-radius: 4px; border: 1px solid {border}; }}")
+
+        bg = tag_color(tag_name)
+        self.setStyleSheet(
+            f"TagChipWidget {{ background: {bg}; border-radius: 10px; }} "
+            f"TagChipWidget:hover {{ background: {bg}; }}"
+        )
 
 
 class FileListWidget(QListWidget):
@@ -54,6 +82,7 @@ class FileListWidget(QListWidget):
         self.setMinimumWidth(400)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
+        self._icon_provider = QFileIconProvider()
     
     def show_context_menu(self, pos: QPoint):
         menu = QMenu(self)
@@ -256,7 +285,8 @@ class MainWindow(QMainWindow):
         # 搜索和筛选栏
         self.search_layout = QHBoxLayout()
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("搜索文件...")
+        self.search_input.setPlaceholderText("搜索文件... (Ctrl+K)")
+        self.search_input.addAction(_search_icon(), QLineEdit.LeadingPosition)
         self.search_button = QPushButton("搜索")
         
         # 类型筛选
@@ -472,7 +502,11 @@ class MainWindow(QMainWindow):
         for file in files:
             item = QListWidgetItem(file.file_name)
             item.setData(Qt.UserRole, file.id)
-            # 添加工具提示
+            fp = Path(file.full_path)
+            if fp.exists():
+                item.setIcon(self.file_list._icon_provider.icon(QFileInfo(str(fp))))
+            else:
+                item.setIcon(self.file_list._icon_provider.icon(QFileIconProvider.File))
             tooltip = f"路径: {file.full_path}\n大小: {file.file_size} bytes\n修改时间: {file.modify_time}"
             item.setToolTip(tooltip)
             self.file_list.addItem(item)
@@ -726,10 +760,12 @@ class MainWindow(QMainWindow):
 
     def _on_indexing_progress(self, current: int, total: int) -> None:
         if total > 0 and current < total:
-            self._indexing_label.setText(f"Content Index: {current}/{total}")
+            self._indexing_label.setText(f"🔍 索引中 {current}/{total}")
             self._indexing_label.setVisible(True)
         else:
-            self._indexing_label.setVisible(False)
+            self._indexing_label.setText("✅ 索引完成")
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(2000, lambda: self._indexing_label.setVisible(False))
 
     def _on_import_progress(self, current: int, total: int) -> None:
         if total > 0:
@@ -742,6 +778,7 @@ class MainWindow(QMainWindow):
 
 def run_ui(app_name: str, vm: MainViewModel, signals: MainSignals) -> int:
     app = QApplication(sys.argv)
+    setup_theme(app)
     window = MainWindow(app_name, vm, signals)
     window.show()
     return app.exec_()

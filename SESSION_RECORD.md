@@ -88,3 +88,56 @@
 
 **决策记录：**
 - 测试 fixture 使用 tmp_path 文件数据库而非 :memory:（因为 IndexWorker 在后台线程创建独立 DB 连接，:memory: 数据库连接间不共享）
+
+## [2026-07-29] Fix 2 Critical + 4 Important issues from V1.3 whole-branch review
+
+**背景：** V1.3 全分支最终审查发现 6 个问题需修复
+
+**完成工作：**
+- **Issue 1 (CRITICAL):** `import_files()` 连接 `worker.file_imported` → `self._index_worker.enqueue`，确保导入的文件被索引
+- **Issue 2 (CRITICAL):** `search_fts()` 查询补充 `file_hash`, `create_time`, `created_at`, `updated_at`, `is_deleted`, `deleted_at` 列；`search_files()` FTS FileRecord 构造使用完整字段
+- **Issue 3 (IMPORTANT):** `enqueue_batch()` 在 `_total == 0` 时发射 `indexing_finished`；`_process_queue()` 退出条件移除 `_total > 0` 守卫
+- **Issue 4 (IMPORTANT):** 并发导入添加 `logger.warning` 提示
+- **Issue 5 (IMPORTANT):** 修正 `_total` 跟踪（与 Issue 3 同修复）
+- **测试修复：** `tests/db/test_fts.py` CREATE TABLE 补充缺失列（file_hash, create_time, created_at, updated_at, deleted_at）
+
+**当前状态：**
+- 63 passed, 4 skipped（全部通过）
+- 修改文件：`main_viewmodel.py`, `database.py`, `index_worker.py`, `test_fts.py`
+- HEAD SHA: `becc4a6`（amend 后）
+
+**待办事项：**
+- 无
+
+**决策记录：**
+- 测试中 CREATE TABLE 必须与实际 schema 的 files 表列匹配，否则 `search_fts` 查询会因引用不存在列而失败
+
+## [2026-07-30] V1.3 最终交付 + UI 美化
+
+**背景：** V1.3 修复审查完毕后，用户要求完成正式交付，并对前端界面进行美化
+
+**完成工作：**
+- 全部 6 个修复问题已确认通过代码审查（2 Critical + 4 Important）
+- 交付 V1.3 到 origin/master + 打 tag `v1.3-fts-async`
+- UI 美化：
+  - 创建 `src/app/ui/theme.py` — 中心化 QSS 样式表（专业蓝 #2563EB + 琥珀 #D97706 配色）
+  - 重写 `TagChipWidget` → 彩色药丸设计（基于 tag_name hash 的 12 色调色板）
+  - `FileListWidget` → OS 原生文件图标（`QFileIconProvider`）
+  - 搜索栏 → 右侧添加放大镜图标（QPainter 绘制）+ 快捷键提示
+  - `CommandPalette` → 阴影效果 + 圆角边框 + 居中浮动定位
+  - 自定义 QSS：QPushButton、QLineEdit、QComboBox、QTreeWidget、QListWidget、QTabWidget、QSplitter、QScrollBar、QProgressBar、QStatusBar、QMenu/QMenuBar、对话框等
+  - 索引进度标签 → 使用图标前缀，完成后 2s 自动消失
+- 测试：63 passed, 4 skipped，0 回归
+
+**当前状态：**
+- V1.3 已发布（tag: `v1.3-fts-async`）
+- UI 视觉全面更新，保留全部原有功能
+- 无新增外部依赖，PyInstaller 兼容
+
+**待办事项：**
+- 无
+
+**决策记录：**
+- QSS 样式使用 f-string 注入 Color 常量，方便后续主题切换
+- 不使用外部图标库（Phosphor/Heroicons），改用 `QFileIconProvider` + `QPainter` 绘制
+- 不使用 Google Fonts（PyInstaller 打包复杂），退化为 Segoe UI 系统字体
