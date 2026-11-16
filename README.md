@@ -1,22 +1,22 @@
-# 本地文件多标记交叉管理系统（v1.0.0）
+# 本地文件多标记交叉管理系统（V1.3）
 
-![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
 ![PyQt5](https://img.shields.io/badge/PyQt5-5.15.0+-green.svg)
-![SQLite](https://img.shields.io/badge/SQLite-3.37.0+-orange.svg)
+![SQLite](https://img.shields.io/badge/SQLite-3.37.0+%20(FTS5)-orange.svg)
 
 ### 项目简介
 
-**本地文件多标记交叉管理系统**是一款本地文件管理工具，基于 PyQt5 开发，采用 MVVM 架构设计，使用 SQLite 作为后端数据库。系统提供文件管理、多标记分类、搜索筛选、文件预览以及元数据管理（文档简介、特定印记）等功能。
+**本地文件多标记交叉管理系统**是一款本地文件管理工具，基于 PyQt5 + SQLite 开发，采用 MVVM + Services 分层架构设计。系统提供异步文件导入、多标记层级分类、SQLite FTS5 全文搜索、实时文件监控同步、全局命令面板（`Ctrl+K`）、文件预览以及元数据管理（文档简介、特定印记）等功能。
 
 ### 核心特性
 
-- **智能文件管理**：支持批量添加文件，自动采集文件信息（文件名、大小、路径、SHA256 哈希值等）
-- **多标记系统**：支持为文件添加多个标记，标记支持层级结构（父子关系），实现文件的多维度分类
-- **搜索与筛选**：支持按文件名搜索，按文件类型、磁盘位置筛选，支持组合筛选
-- **文件预览**：支持图片（`.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`）和文本文件（`.txt`, `.md`, `.py`, `.json`, `.xml` 等）的预览
-- **元数据管理**：支持为文件添加文档简介备注和特定印记，印记按时间倒序展示
-- **拖拽标记**：支持将文件拖拽到标记树节点上，快速完成标记操作
-- **本地存储**：所有数据存储在本地 SQLite 数据库中，保障数据安全
+- **异步文件管理**：支持批量导入文件，后台线程（`ImportWorker`）异步计算 SHA256 哈希去重并汇报导入进度，避免主线程卡顿
+- **多标记系统与就地编辑**：支持层级标签树、文件拖拽打标，并在右侧详情面板通过彩色标签胶囊（`TagChipWidget`）就地增删标签（`+` / `×`）
+- **全局命令面板（`Ctrl+K`）**：支持在选中文件时快速打标，未选中文件时执行搜索并支持 `↑`/`↓` 键浏览最近搜索历史
+- **全文搜索与多维筛选**：基于 SQLite FTS5 与 `IndexWorker` 后台增量索引，支持 `.txt`、`.md`、`.log`、`.csv`、`.pdf`、`.docx`、`.xlsx` 文件内容检索，并可结合文件名、扩展名与磁盘位置筛选
+- **实时文件监控同步**：通过 `FileMonitor`（封装 `watchdog` + `QTimer` 防抖）监听已导入文件所在目录，自动同步外部移动、重命名、修改与删除事件并更新 FTS 索引
+- **现代化 UI 与预览**：集中式 QSS 主题（`theme.py`）、OS 原生文件图标，支持图片/文本文件预览、文档简介备注与时间倒序特定印记
+- **本地存储**：所有数据与索引存储在本地 SQLite 数据库中，保障数据安全
 
 ---
 
@@ -25,60 +25,58 @@
 #### 项目结构
 
 ```text
-file_management_V1.0.0/
+filemanagement/
 ├── config/
+│   ├── commands.txt            # AI 开发指令参考文档
 │   └── config.ini              # 应用配置文件
 ├── data/
 │   └── users/
 │       └── default/
-│           └── app.sqlite3     # SQLite 数据库文件
+│           └── app.sqlite3     # SQLite 数据库文件（运行后生成）
+├── docs/                       # 需求文档、设计报告与版本 PRD/Plan
 ├── logs/
-│   └── app.log                 # 运行日志
+│   └── app.log                 # 运行日志（运行后生成）
 ├── src/
 │   ├── __init__.py
-│   ├── main.py                 # 应用入口文件
+│   ├── main.py                 # 应用入口文件（初始化 DB/IndexWorker/FileMonitor）
 │   └── app/
 │       ├── __init__.py
-│       ├── core/               # 核心配置模块
-│       │   ├── logging_setup.py    # 日志配置
-│       │   ├── paths.py            # 路径管理
-│       │   └── settings.py         # 配置加载
-│       ├── db/                 # 数据库模块
-│       │   ├── __init__.py
-│       │   ├── database.py         # 数据库连接与操作
-│       │   └── schema.sql          # 数据库表结构定义
-│       ├── model/              # 数据模型层（Model）
-│       │   ├── __init__.py
-│       │   ├── file_record.py      # 文件记录数据类
-│       │   └── tag.py              # 标签数据类
-│       ├── viewmodel/          # 视图模型层（ViewModel）
-│       │   ├── main_viewmodel.py   # 核心业务逻辑
-│       │   └── signals.py          # PyQt5 信号定义
-│       └── ui/                 # 视图层（View）
-│           └── main_window.py      # 主窗口及所有 UI 组件
-├── dist_new/
-│   └── 文件管理系统.exe         # PyInstaller 打包产物
+│       ├── core/               # 核心配置模块（日志、路径、配置加载）
+│       ├── db/                 # 数据库连接、FTS5 方法与 schema.sql
+│       ├── model/              # 数据模型层（FileRecord、Tag）
+│       ├── services/           # 独立服务层（文件监控、异步导入、全文提取与后台索引）
+│       │   ├── file_monitor.py
+│       │   ├── import_worker.py
+│       │   ├── index_worker.py
+│       │   └── text_extractor.py
+│       ├── viewmodel/          # 视图模型层（MainViewModel、MainSignals）
+│       └── ui/                 # 视图层（MainWindow、CommandPalette、QSS theme）
+├── tests/                      # pytest + pytest-qt 单元测试与集成测试
+├── dist_new/                   # PyInstaller 打包输出目录
 ├── requirements.txt            # Python 依赖
 ├── filemanagement.spec         # PyInstaller 打包配置
-├── start.bat                   # 启动脚本
-└── package.bat                 # 打包脚本
+├── pytest.ini                  # pytest 配置
+├── start.bat                   # 启动脚本（py311-pack）
+└── package.bat                 # 打包脚本（py311-pack）
 ```
 
-项目采用 **MVVM（Model-View-ViewModel）** 分层架构：
+项目采用 **MVVM + Services** 分层架构：
 - **Model**（`src/app/model/`）：定义 `FileRecord` 和 `Tag` 数据类
-- **ViewModel**（`src/app/viewmodel/`）：`MainViewModel` 封装所有业务逻辑和数据库操作，`MainSignals` 定义 UI 更新信号
-- **View**（`src/app/ui/`）：`MainWindow` 及自定义组件（`FileListWidget`、`TagTreeWidget` 等）负责界面展示和用户交互
+- **Services**（`src/app/services/`）：`FileMonitor`（watchdog + 防抖信号）、`ImportWorker`（异步导入与哈希）、`TextExtractor`（多格式文本抽取）与 `IndexWorker`（后台批量 FTS 索引）
+- **ViewModel**（`src/app/viewmodel/`）：`MainViewModel` 封装业务逻辑、数据库同步与搜索，`MainSignals` 定义 PyQt5 信号
+- **View**（`src/app/ui/`）：`MainWindow`、`CommandPalette` 与 `theme.py` 负责界面展示、主题样式与用户交互
 
 #### 技术栈
 
 | 组件 | 技术 | 说明 |
 |------|------|------|
-| GUI 框架 | PyQt5 >= 5.15.0 | 桌面图形界面 |
-| 运行环境 | Python 3.12+ | 后端逻辑 |
-| 数据库 | SQLite | 内置轻量级数据库 |
-| 文件监控 | watchdog >= 4.0.1 | 文件系统监控（预留） |
+| GUI 框架 | PyQt5 >= 5.15.0 | 桌面图形界面与异步线程/信号 |
+| 运行环境 | Python 3.11+ | 推荐使用 `py311-pack` Conda 环境 |
+| 数据库 | SQLite 3.37.0+ (FTS5) | 本地关系存储与全文检索 |
+| 文件监控 | watchdog >= 4.0.1 | 文件系统实时变更监听 |
+| 文本提取 | pymupdf / python-docx / openpyxl / chardet | PDF/DOCX/XLSX 与编码探测 |
 | 图像处理 | Pillow >= 9.0.0 | 图片预览支持 |
-| 类型提示 | typing_extensions >= 4.0.0 | 增强类型注解 |
+| 自动化测试 | pytest / pytest-qt | ViewModel、Services 与 UI 测试 |
 
 ---
 
@@ -87,11 +85,13 @@ file_management_V1.0.0/
 | 表名 | 用途 | 备注 |
 |------|------|------|
 | `files` | 存储文件记录 | 包含文件名、路径、大小、SHA256 哈希等，支持软删除 |
-| `tags` | 存储标记信息 | 支持层级结构（parent_id），支持软删除 |
+| `tags` | 存储标记信息 | 支持层级结构（`parent_id`），支持软删除 |
 | `file_tag_relation` | 文件与标记关联 | 多对多关系，联合主键 |
-| `search_history` | 搜索历史记录 | 记录用户搜索的 JSON 查询 |
+| `search_history` | 搜索历史记录 | 记录最近搜索查询（自动清理保留上限 50 条） |
 | `file_notes` | 文件简介备注 | 每个文件一条备注（UNIQUE 约束） |
 | `file_imprints` | 文件特定印记 | 每个文件可有多条印记，按时间倒序 |
+| `file_fts` | 全文检索虚表 | SQLite FTS5 (`unicode61`) 存储文件名与正文内容 |
+| `file_content_status` | 全文索引状态 | 记录 `pending` / `indexed` / `skipped_*` / `error` 状态 |
 
 ---
 
@@ -99,33 +99,32 @@ file_management_V1.0.0/
 
 #### 环境要求
 
-- **操作系统**：Windows 10/11
-- **Python**：3.12+（源码运行时需要）
+- **操作系统**：Windows 10/11（开发环境亦支持 Linux/macOS 测试）
+- **Python**：3.11+（`py311-pack` Conda 环境）
 - **内存**：至少 2GB
 - **磁盘空间**：至少 100MB 可用空间
 
-#### 方法1：直接运行可执行文件（推荐）
-
-无需安装 Python 或其他依赖：
+#### 方法 1：直接运行可执行文件（Windows）
 
 1. 进入 `dist_new` 目录
-2. 双击 `文件管理系统.exe` 运行应用
+2. 运行 `文件管理系统.exe`
 
-#### 方法2：使用启动脚本
+#### 方法 2：使用启动脚本
 
-需要已配置 `mag_app` conda 环境：
+需要已配置 `py311-pack` conda 环境：
 
 ```bash
-cd /d <项目根目录>
 start.bat
 ```
 
-#### 方法3：使用 Python 直接运行
+#### 方法 3：使用 Python 直接运行与测试
 
 ```bash
-cd /d <项目根目录>
 pip install -r requirements.txt
-python -m src.main
+conda run -n py311-pack python -m src.main
+
+# 运行测试套件
+conda run -n py311-pack python -m pytest
 ```
 
 ---
@@ -134,63 +133,31 @@ python -m src.main
 
 #### 1. 添加文件
 - 点击菜单「文件」->「导入文件...」或按快捷键 `Ctrl+I`
-- 选择本地文件
-- 文件信息会自动采集并写入数据库
+- 选择本地文件后后台异步计算 SHA256 并导入，状态栏实时显示导入与 FTS 索引进度
 
-#### 2. 管理标记
-- 菜单「标签」->「添加标签...」创建新标记
-- 在左侧标记树中右键点击标记，可进行删除操作
-- 标记支持层级结构（父子关系）
+#### 2. 管理标记与就地打标
+- 菜单「标签」->「添加标签...」或在标签树右键创建新标记
+- **拖拽打标**：在文件列表中选择一个或多个文件拖拽到左侧标记树节点
+- **就地编辑**：在右侧预览面板点击标签旁的 `+` 打开命令面板选择标签，或点击标签胶囊上的 `×` 直接移除
+- **全局命令面板**：按 `Ctrl+K` 唤醒命令面板进行快捷搜索（支持 `↑`/`↓` 切换搜索历史）或打标
 
-#### 3. 为文件添加标记
+#### 3. 搜索与多维筛选
+- **全文与文件名搜索**：在搜索框输入关键词后点击「搜索」，优先通过 FTS5 匹配文件内容与文件名，并合并文件名/扩展名模糊匹配结果
+- **条件筛选**：点击左侧标签树节点（含实时计数），或使用顶部「类型」「位置」下拉框组合筛选
 
-**方法 1：拖拽标记（推荐）**
-- 在文件列表中选择一个或多个文件（支持 `Ctrl` 多选、`Shift` 连续多选）
-- 将选中的文件拖拽到左侧标记树的目标标记上
-- 释放鼠标完成标记
-
-**方法 2：右键菜单**
-- 在文件列表中右键点击文件
-- 选择「添加标签」
-
-#### 4. 筛选文件
-- **按标记筛选**：点击左侧标记树中的标记节点
-- **按类型筛选**：在顶部筛选栏选择「类型」下拉框
-- **按位置筛选**：在顶部筛选栏选择「位置」下拉框
-- **重置筛选**：点击「重置筛选」按钮
-
-#### 5. 搜索文件
-- 在搜索框中输入关键词
-- 点击「搜索」按钮
-- 支持按文件名和文件扩展名模糊搜索
-
-#### 6. 文件预览与元数据
-- 选择文件后，右侧面板显示三个标签页：
-  - **文件预览**：显示文件基本信息、标签、内容预览（文本/图片）
-  - **文档注释**：编辑和保存文件的自定义备注
-  - **文件印记**：添加和查看文件的特定印记记录
-
-#### 7. 文件操作
-- 右键点击文件，选择「删除」进行软删除（数据库标记删除，不删除本地文件）
-
----
-
-### 注意事项
-
-- **本地运行**：本系统仅在本地运行，所有数据存储在本地 SQLite 数据库中
-- **预览支持**：图片（`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`）、文本文件（`.txt`, `.md`, `.py`, `.java`, `.cpp`, `.h`, `.json`, `.xml`）
-- **软删除**：软删除的文件仅在数据库中标记为已删除，不会实际删除本地文件
-- **数据目录**：用户数据存储在 `data/users/<用户名>/` 目录下，默认用户为 `default`
-- **悬浮提示**：鼠标悬停在文件列表项上时，自动显示文件路径、大小和修改时间
+#### 4. 文件预览与元数据
+- 选中文件后，右侧三个标签页分别展示：
+  - **文件预览**：文件基本信息、标签胶囊管理与文本/图片内容预览
+  - **文档注释**：编辑并保存文件自定义备注
+  - **文件印记**：添加和查看文件特定印记记录
 
 ---
 
 ### 打包发布
 
-使用 PyInstaller 打包为独立可执行文件：
+使用 PyInstaller 打包为独立可执行文件（需 `py311-pack` 环境）：
 
 ```bash
-cd /d <项目根目录>
 package.bat
 ```
 
