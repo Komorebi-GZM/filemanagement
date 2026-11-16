@@ -13,3 +13,4 @@ class MainSignals(QObject):
     file_imprint_added = pyqtSignal(int)  # file_id
     indexing_progress = pyqtSignal(int, int)  # current, total
     import_progress = pyqtSignal(int, int)    # current, total
+    import_finished = pyqtSignal(int)         # imported count

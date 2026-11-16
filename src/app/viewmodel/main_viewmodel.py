@@ -324,6 +324,7 @@ class MainViewModel:
         worker = ImportWorker(self._db, candidates_list)
         if self.signals:
             worker.progress.connect(lambda c, t: self.signals.import_progress.emit(c, t))
+            worker.import_finished.connect(lambda count: self.signals.import_finished.emit(count))
             worker.finished.connect(lambda: self.signals.files_updated.emit(None))
         worker.finished.connect(worker.deleteLater)
         worker.finished.connect(lambda: setattr(self, '_import_worker', None))

@@ -15,18 +15,22 @@ logger = logging.getLogger(__name__)
 class ImportWorker(QObject):
     progress = pyqtSignal(int, int)
     finished = pyqtSignal()
+    import_finished = pyqtSignal(int)
     file_imported = pyqtSignal(int, str)
 
     def __init__(self, db: Database, candidates: list[ImportCandidate], parent: Optional[QObject] = None):
         super().__init__(parent)
         self._db = db
         self._candidates = candidates
+        self._thread: Optional[QThread] = None
 
     def run(self):
         thread = QThread()
+        self._thread = thread
         self.moveToThread(thread)
         thread.started.connect(lambda: self._do_import(thread), Qt.DirectConnection)
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_thread", None))
         thread.start()
 
     def _do_import(self, thread: QThread) -> None:
@@ -50,7 +54,7 @@ class ImportWorker(QObject):
                 self.progress.emit(i + 1, total)
                 continue
             row = conn.execute(
-                "SELECT id FROM files WHERE file_hash = ?", (file_hash,)
+                "SELECT id, is_deleted FROM files WHERE file_hash = ?", (file_hash,)
             ).fetchone()
             if row is None:
                 conn.execute(
@@ -71,10 +75,13 @@ class ImportWorker(QObject):
                     (file_name, file_ext, full_path, int(st.st_size),
                      int(st.st_ctime), int(st.st_mtime), now, file_hash),
                 )
+                if row["is_deleted"]:
+                    inserted += 1
             self.file_imported.emit(file_id, full_path)
             self.progress.emit(i + 1, total)
         conn.commit()
         conn.close()
+        self.import_finished.emit(inserted)
         self.finished.emit()
         logger.info("Async import finished: %s new files", inserted)
         thread.quit()

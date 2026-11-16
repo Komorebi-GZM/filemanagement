@@ -445,6 +445,8 @@ class MainWindow(QMainWindow):
         self.signals.tags_updated.connect(self._update_tag_tree)
         self.signals.indexing_progress.connect(self._on_indexing_progress)
         self.signals.import_progress.connect(self._on_import_progress)
+        if hasattr(self.signals, "import_finished"):
+            self.signals.import_finished.connect(self._on_import_finished)
     
     def _initialize_data(self):
         # 加载标签
@@ -635,10 +637,9 @@ class MainWindow(QMainWindow):
                 except OSError:
                     continue
             
-            # 导入文件
+            # 导入文件（异步执行，完成后通过 import_finished 信号通知）
             if candidates:
-                inserted = self.vm.import_files(candidates)
-                QMessageBox.information(self, "导入完成", f"成功导入 {inserted} 个文件")
+                self.vm.import_files(candidates)
     
     def _on_add_tag(self):
         """添加标签"""
@@ -778,6 +779,12 @@ class MainWindow(QMainWindow):
             self._import_progress.setValue(current)
             if current >= total:
                 self._import_progress.setVisible(False)
+
+    def _on_import_finished(self, count: int) -> None:
+        self._update_file_list()
+        self._load_filter_options()
+        self._update_tag_tree()
+        QMessageBox.information(self, "导入完成", f"成功导入 {count} 个文件")
 
 
 def run_ui(app_name: str, vm: MainViewModel, signals: MainSignals) -> int:
