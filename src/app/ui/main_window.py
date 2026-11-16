@@ -585,10 +585,15 @@ class MainWindow(QMainWindow):
             
             # 加载磁盘位置
             self.filter_location_combo.clear()
-            self.filter_location_combo.addItem("所有位置")
-            drive_letters = self.vm.get_all_drive_letters()
-            for drive in drive_letters:
-                self.filter_location_combo.addItem(drive)
+            self.filter_location_combo.addItem("所有位置", None)
+            if hasattr(self.vm, "get_all_locations"):
+                locations = self.vm.get_all_locations()
+                for label, key in locations:
+                    self.filter_location_combo.addItem(label, key)
+            elif hasattr(self.vm, "get_all_drive_letters"):
+                drive_letters = self.vm.get_all_drive_letters()
+                for drive in drive_letters:
+                    self.filter_location_combo.addItem(drive, drive)
         finally:
             self.filter_type_combo.blockSignals(False)
             self.filter_location_combo.blockSignals(False)
@@ -596,7 +601,7 @@ class MainWindow(QMainWindow):
     def _on_filter_change(self):
         """筛选条件变化处理"""
         file_ext = None
-        drive_letter = None
+        location = None
         
         # 获取类型筛选
         if self.filter_type_combo.currentIndex() > 0:
@@ -604,10 +609,12 @@ class MainWindow(QMainWindow):
         
         # 获取位置筛选
         if self.filter_location_combo.currentIndex() > 0:
-            drive_letter = self.filter_location_combo.currentText()
+            location = self.filter_location_combo.currentData()
+            if location is None:
+                location = self.filter_location_combo.currentText()
         
         # 应用筛选
-        files = self.vm.list_files(file_ext=file_ext, drive_letter=drive_letter)
+        files = self.vm.list_files(file_ext=file_ext, location=location)
         self._update_file_list(files)
     
     def _on_reset_filter(self):
