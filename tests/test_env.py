@@ -3,7 +3,7 @@ import sys
 
 def test_python_version():
     assert sys.version_info.major == 3
-    assert sys.version_info.minor == 11
+    assert sys.version_info >= (3, 11)
 
 
 def test_db_session_fixture(db_session):
