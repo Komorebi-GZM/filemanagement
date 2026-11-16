@@ -227,3 +227,36 @@
 - macOS 采用 onedir + `.app`，因 onefile 窗口应用在 macOS 上被 PyInstaller 弃用
 - 新 PR 基于 `fix/audit-bugs-and-cleanup`（堆叠 PR），避免与 PR #3 中的 README/file_monitor 改动冲突
 
+## [2026-11-16] 梳理清理废弃 PR #1、Hotfix 修复 master 严重 Bug、合并推进 PR #3 与 PR #4
+
+**背景：** 梳理仓库 PR 全景，清理已废弃分支与仓库卫生问题，将 master 上的严重列表清空与异步导入 Bug 独立开 hotfix 分支验证合并，并依次推进合并上游 PR #3 与跨平台基线 PR #4。
+
+**完成工作：**
+- **PR 梳理与废弃分支清理：**
+  - 审查 PR #1、#2、#3、#4、#5；确认 PR #1 中高价值的 SQLite 盘符优化已在 PR #3 中挽救合入，清理删除远端已废弃分支 `origin/optimize-architecture-5931458531709047786`。
+  - 仓库卫生：从 Git 跟踪中彻底移除 `.superpowers/` 目录（已在 `.gitignore`）。
+- **Master 严重 Bug 独立 Hotfix 分支（PR #6）：**
+  - 创建 `hotfix/critical-master-bugs` 分支。
+  - 修复文件列表抹白 Bug：`MainSignals.files_updated = pyqtSignal(object)`，全量更新时发射 `None`，保留 `[]` 作为空筛选结果，并在更新文件时同步刷新标签计数。
+  - 修复异步导入统计：`ImportWorker` 增加 `import_finished = pyqtSignal(int)` 并在主界面真正导入完成后准确弹窗提示导入数量。
+  - 兼容 watchdog 7.x：`patterns=None` 消除文件监控超时。
+  - 增加 UI 回归测试用例 `tests/ui/test_main_window_fixes.py`。
+  - 创建 PR #6 并已合并到 `master`。
+- **推进合并 PR #3 与 PR #4：**
+  - 将 PR #3（`fix/audit-bugs-and-cleanup`）rebase 至最新 master 并合入 `master`。
+  - 将 PR #4（`chore/cross-platform-win-mac`）base 改为 `master`，rebase 至最新 master 并合入 `master`。
+  - 将 PR #5（`docs/win-mac-location-path-design`）base 切换至 `master`，rebase 到最新 master，保持为干净的 1-commit 状态等待后续实施。
+  - 清理已合并的远程分支 `hotfix/critical-master-bugs`、`fix/audit-bugs-and-cleanup`、`chore/cross-platform-win-mac`。
+
+**当前状态：**
+- `master` 分支为最新主线，全量测试套件在 macOS (Python 3.12 + PyQt5 5.15.11 + watchdog 7.1.0) 下通过：`71 passed, 4 skipped`（100% 通过）。
+- PR #1 已清理关闭；PR #3、PR #4、PR #6 已合并；PR #5 处于待实施状态并与 master 保持 clean。
+
+**待办事项：**
+- 推进 PR #5（Win + macOS 路径规范化与位置筛选设计规范）的具体代码实现。
+
+**决策记录：**
+- 生产严重 Bug 严格走独立 hotfix 分支，先行合并到 master，避免与功能特性大 PR 耦合延误发版。
+- 堆叠 PR 在底层 PR 合并后，通过 PATCH base 为 master + rebase，保持线性整洁的历史。
+
+
