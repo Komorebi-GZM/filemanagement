@@ -281,3 +281,37 @@
 - 生产严重 Bug 严格走独立 hotfix 分支，先行合并到 master，避免与功能特性大 PR 耦合延误发版。
 - 堆叠 PR 在底层 PR 合并后，通过 PATCH base 为 master + rebase，保持线性整洁的历史。
 
+## [2026-11-16] 跨平台位置筛选与路径规范化代码落地（严格 TDD）
+
+**背景：** PR #5 设计方案合入主线后，基于 `master` 切出功能分支 `feat/win-mac-location-path`，采用严格测试先行（Red -> Green -> Refactor）流程完成代码实现。
+
+**完成工作：**
+- **统一路径工具模块（`src/app/core/path_utils.py`）：**
+  - 实现 `normalize_path`：解析软链接/相对路径、Unicode NFC 规范化（解决 macOS APFS/HFS+ 分解字符不一致）、Windows 盘符首字母统一大写。
+  - 实现 `extract_location`：Windows 盘符映射为 `(C:, C:)`，macOS 外接独立卷映射为 `(卷名, /Volumes/卷名)`，macOS 系统卷/隐藏卷映射为 `(Macintosh HD, /)`，无效/相对路径返回 `None`。
+  - 实现 `escape_like`：对 SQLite `LIKE` 查询中 `\`、`%`、`_` 进行安全转义，配合 `ESCAPE '\'` 使用。
+- **底层写入规范化与双阶段匹配：**
+  - `ImportWorker._do_import()` 与 `MainViewModel._handle_file_moved()` 写入前统一规范化路径。
+  - `Database.find_by_path_and_size()` 与 `MainViewModel._find_active_file_by_path()` 实现双阶段匹配：阶段一走 `idx_files_full_path` 索引精确 NFC 匹配（$O(\log N)$）；阶段二仅在未命中时使用 `COLLATE NOCASE LIMIT 10` 并在 Python 端通过 `.casefold()` 安全校验，兼顾性能与大小写容错。
+- **ViewModel 与 UI 表现层集成：**
+  - `MainViewModel.get_all_locations()`：按规则去重聚合位置列表，Macintosh HD 排首位，其余盘符与卷依次排序。
+  - `MainViewModel.list_files()`：新增 `location` 参数，支持 Windows 盘符、外接卷边界隔离匹配（防止 `/Volumes/USB` 误伤 `/Volumes/USB2`）以及系统根目录匹配；保留 `drive_letter` 别名完全向后兼容。
+  - `MainWindow._load_filter_options()` 与 `_on_filter_change()`：下拉框使用 `addItem(label, key)` 绑定显示名称与查询键，无感知兼容旧版 VM。
+- **测试覆盖（新增 4 个测试模块，共 19 个用例，全部 TDD 先行并通过）：**
+  - `tests/core/test_path_utils.py`（8 passed）
+  - `tests/viewmodel/test_path_matching_cross_platform.py`（4 passed）
+  - `tests/viewmodel/test_cross_platform_locations.py`（5 passed）
+  - `tests/ui/test_main_window_locations.py`（2 passed）
+
+**当前状态：**
+- 全量测试套件共 94 个用例，在 macOS (Python 3.12 + PyQt5 5.15.11 + watchdog 7.1.0) 下全部通过：`90 passed, 4 skipped`（100% 通过）。
+- 功能分支 `feat/win-mac-location-path` 准备就绪，可推送并创建 PR。
+
+**待办事项：**
+- 推送分支至 origin 并创建 PR 指向 `master`，引用设计文档 [2026-11-15-win-mac-location-path-design.md](docs/superpowers/specs/2026-11-15-win-mac-location-path-design.md)。
+
+**决策记录：**
+- 查询侧将 `COLLATE NOCASE` 限制为阶段二降级路径并带 `LIMIT 10`，杜绝未命中时的全表扫描拖慢主查询速度。
+- macOS 隐藏系统卷（`/System/Volumes/Data` 等）统一收敛至 `Macintosh HD`，避免内部卷名暴露在用户下拉框中。
+
+
