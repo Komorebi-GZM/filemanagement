@@ -57,3 +57,33 @@ def test_count_files_with_db(db_session):
 
     # Nonexistent tag -> count 0
     assert vm.count_files(999) == 0
+
+
+def test_get_all_drive_letters_sql_and_soft_delete_signal(db_session):
+    from src.app.viewmodel.signals import MainSignals
+
+    db_session.execute(
+        """
+        INSERT INTO files (id, file_name, file_ext, full_path, file_size, create_time, modify_time, file_hash, is_deleted, created_at, updated_at)
+        VALUES
+            (1, 'a.txt', 'txt', 'D:\\work\\a.txt', 100, 0, 0, 'h1', 0, 0, 0),
+            (2, 'b.txt', 'txt', 'C:\\docs\\b.txt', 100, 0, 0, 'h2', 0, 0, 0),
+            (3, 'c.txt', 'txt', 'E:\\old\\c.txt', 100, 0, 0, 'h3', 1, 0, 0),
+            (4, 'd.txt', 'txt', '/home/user/d.txt', 100, 0, 0, 'h4', 0, 0, 0),
+            (5, 'e.txt', 'txt', '1:\\invalid\\e.txt', 100, 0, 0, 'h5', 0, 0, 0)
+        """
+    )
+
+    db = Database(":memory:")
+    db.connect = MagicMock(return_value=db_session)
+    signals = MainSignals()
+    vm = MainViewModel(db=db, signals=signals)
+
+    assert vm.get_all_drive_letters() == ["C:", "D:"]
+    assert MainViewModel(db=None).get_all_drive_letters() == []
+
+    received = []
+    signals.files_updated.connect(received.append)
+    vm.soft_delete_file(1)
+    assert received == [None]
+    assert vm.get_all_drive_letters() == ["C:"]

@@ -573,19 +573,25 @@ class MainWindow(QMainWindow):
     
     def _load_filter_options(self):
         """加载筛选选项"""
-        # 加载文件类型
-        self.filter_type_combo.clear()
-        self.filter_type_combo.addItem("所有类型")
-        file_extensions = self.vm.get_all_file_extensions()
-        for ext in file_extensions:
-            self.filter_type_combo.addItem(ext)
-        
-        # 加载磁盘位置
-        self.filter_location_combo.clear()
-        self.filter_location_combo.addItem("所有位置")
-        drive_letters = self.vm.get_all_drive_letters()
-        for drive in drive_letters:
-            self.filter_location_combo.addItem(drive)
+        self.filter_type_combo.blockSignals(True)
+        self.filter_location_combo.blockSignals(True)
+        try:
+            # 加载文件类型
+            self.filter_type_combo.clear()
+            self.filter_type_combo.addItem("所有类型")
+            file_extensions = self.vm.get_all_file_extensions()
+            for ext in file_extensions:
+                self.filter_type_combo.addItem(ext)
+            
+            # 加载磁盘位置
+            self.filter_location_combo.clear()
+            self.filter_location_combo.addItem("所有位置")
+            drive_letters = self.vm.get_all_drive_letters()
+            for drive in drive_letters:
+                self.filter_location_combo.addItem(drive)
+        finally:
+            self.filter_type_combo.blockSignals(False)
+            self.filter_location_combo.blockSignals(False)
     
     def _on_filter_change(self):
         """筛选条件变化处理"""

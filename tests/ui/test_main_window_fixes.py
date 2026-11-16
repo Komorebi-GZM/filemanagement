@@ -1,9 +1,10 @@
 from unittest.mock import MagicMock
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtCore import QPoint, Qt
+from PyQt5.QtWidgets import QDialog, QInputDialog, QMenu, QMessageBox
 
 from src.app.model.file_record import FileRecord
 from src.app.model.tag import Tag
-from src.app.ui.main_window import MainWindow
+from src.app.ui.main_window import MainWindow, NoteDialog
 from src.app.viewmodel.signals import MainSignals
 
 
@@ -93,3 +94,86 @@ def test_async_import_dialog_uses_import_finished_signal(qapp, monkeypatch, tmp_
     # Completion signal delivers actual imported count
     signals.import_finished.emit(3)
     assert info_calls == [("导入完成", "成功导入 3 个文件")]
+
+
+def test_file_list_context_menu_actions_wired(qapp, monkeypatch):
+    win, vm, _ = _make_window(monkeypatch)
+    win.file_list.setCurrentRow(0)
+    assert win.file_list.item(0).isSelected()
+
+    # Intercept QMenu.exec_ and trigger "添加注释"
+    def trigger_action(action_text):
+        def _exec(self, *args, **kwargs):
+            for action in self.actions():
+                if action.text() == action_text:
+                    action.trigger()
+                    return action
+            return None
+        return _exec
+
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: QMessageBox.Ok)
+
+    # 1. 添加注释 -> NoteDialog -> vm.set_file_note
+    monkeypatch.setattr(QMenu, "exec_", trigger_action("添加注释"))
+    monkeypatch.setattr(NoteDialog, "exec_", lambda self: QDialog.Accepted)
+    monkeypatch.setattr(NoteDialog, "get_note", lambda self: "updated note")
+    win.file_list.show_context_menu(QPoint(5, 5))
+    vm.set_file_note.assert_called_once_with(1, "updated note")
+
+    # 2. 添加标签 (single selection) -> opens CommandPalette scoped to file 1
+    monkeypatch.setattr(QMenu, "exec_", trigger_action("添加标签"))
+    win.file_list.show_context_menu(QPoint(5, 5))
+    assert win.command_palette.context_file_id == 1
+
+    # 3. 添加标签 (multi selection) -> QInputDialog -> vm.add_tag_to_file
+    win.command_palette.hide()
+    win.file_list.item(1).setSelected(True)
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *args, **kwargs: ("Docs", True))
+    win.file_list.show_context_menu(QPoint(5, 5))
+    vm.add_tag_to_file.assert_any_call(1, 20)
+    vm.add_tag_to_file.assert_any_call(2, 20)
+
+    # 4. 删除 -> confirmation -> vm.soft_delete_file
+    win.file_list.clearSelection()
+    win.file_list.item(0).setSelected(True)
+    monkeypatch.setattr(QMenu, "exec_", trigger_action("删除"))
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+    win.file_list.show_context_menu(QPoint(5, 5))
+    vm.soft_delete_file.assert_called_once_with(1)
+
+
+def test_tag_tree_context_menu_actions_wired(qapp, monkeypatch):
+    win, vm, _ = _make_window(monkeypatch)
+    root = win.tag_tree.topLevelItem(0)
+    tag_item = root.child(0)
+    tag_rect = win.tag_tree.visualItemRect(tag_item)
+    root_rect = win.tag_tree.visualItemRect(root)
+
+    captured_actions = {}
+
+    def _exec_and_trigger(action_text):
+        def _exec(self, *args, **kwargs):
+            captured_actions["actions"] = {a.text(): a for a in self.actions()}
+            act = captured_actions["actions"].get(action_text)
+            if act and act.isEnabled():
+                act.trigger()
+            return act
+        return _exec
+
+    # Root node ("所有文件") must disable delete action
+    monkeypatch.setattr(QMenu, "exec_", _exec_and_trigger("删除标签"))
+    win.tag_tree.show_context_menu(root_rect.center())
+    assert captured_actions["actions"]["删除标签"].isEnabled() is False
+    vm.delete_tag.assert_not_called()
+
+    # Tag node: "添加标签" creates child tag under tag id=10
+    monkeypatch.setattr(QMenu, "exec_", _exec_and_trigger("添加标签"))
+    monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: ("SubTag", True))
+    win.tag_tree.show_context_menu(tag_rect.center())
+    vm.create_tag.assert_called_once_with("SubTag", parent_id=10)
+
+    # Tag node: "删除标签" deletes tag id=10 after confirmation
+    monkeypatch.setattr(QMenu, "exec_", _exec_and_trigger("删除标签"))
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+    win.tag_tree.show_context_menu(tag_rect.center())
+    vm.delete_tag.assert_called_once_with(10)

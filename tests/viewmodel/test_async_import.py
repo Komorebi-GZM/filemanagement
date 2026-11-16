@@ -64,3 +64,39 @@ class TestAsyncImport:
         files = vm.list_files(limit=10)
         assert len(files) >= 1
         assert any("hello.txt" in f.file_name for f in files)
+
+    def test_import_finished_emits_actual_count_and_files_updated_none(self, qtbot, vm, tmp_path):
+        p1 = tmp_path / "one.txt"
+        p2 = tmp_path / "two.txt"
+        p1.write_text("content-1", encoding="utf-8")
+        p2.write_text("content-2", encoding="utf-8")
+        candidates = [
+            ImportCandidate(path=p1, size=p1.stat().st_size),
+            ImportCandidate(path=p2, size=p2.stat().st_size),
+        ]
+
+        finished_counts = []
+        files_updated_payloads = []
+        vm.signals.import_finished.connect(finished_counts.append)
+        vm.signals.files_updated.connect(files_updated_payloads.append)
+
+        vm.import_files(candidates)
+        qtbot.waitUntil(lambda: len(finished_counts) == 1 and len(files_updated_payloads) == 1, timeout=5000)
+        assert finished_counts == [2]
+        assert files_updated_payloads == [None]
+
+        # Re-importing the exact same active files should report 0 new imports
+        finished_counts.clear()
+        qtbot.waitUntil(lambda: vm._import_worker is None, timeout=5000)
+        vm.import_files(candidates)
+        qtbot.waitUntil(lambda: len(finished_counts) == 1, timeout=5000)
+        assert finished_counts == [0]
+
+        # Soft-deleting one and re-importing should count the restored file (1)
+        files = vm.list_files(limit=10)
+        vm.soft_delete_file(files[0].id)
+        finished_counts.clear()
+        qtbot.waitUntil(lambda: vm._import_worker is None, timeout=5000)
+        vm.import_files(candidates)
+        qtbot.waitUntil(lambda: len(finished_counts) == 1, timeout=5000)
+        assert finished_counts == [1]
