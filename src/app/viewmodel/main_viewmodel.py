@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -92,7 +93,8 @@ class MainViewModel:
 
     def list_files(self, limit: int = 200, tag_id: Optional[int] = None, sort_by: str = "name", 
                    sort_order: str = "asc", file_ext: Optional[str] = None, 
-                   drive_letter: Optional[str] = None) -> list[FileRecord]:
+                   drive_letter: Optional[str] = None,
+                   location: Optional[str] = None) -> list[FileRecord]:
         """
         列出文件记录，支持多种筛选和排序条件
         
@@ -102,11 +104,14 @@ class MainViewModel:
             sort_by: 排序字段，支持 "name"（文件名）
             sort_order: 排序顺序，"asc" 升序，"desc" 降序
             file_ext: 按文件扩展名筛选，None表示不筛选
-            drive_letter: 按磁盘盘符筛选（如 "C:"），None表示不筛选
+            drive_letter: 按磁盘盘符筛选（如 "C:"，向后兼容）
+            location: 按位置筛选（如 "C:"、"/Volumes/USB"、"/"）
             
         Returns:
             符合条件的文件记录列表
         """
+        effective_loc = location if location is not None else drive_letter
+
         with self._db.connect() as conn:
             query = """
                 SELECT DISTINCT f.id, f.file_name, f.file_ext, f.full_path, f.file_size, 
@@ -126,9 +131,24 @@ class MainViewModel:
                 conditions.append("f.file_ext = ?")
                 params.append(file_ext)
             
-            if drive_letter is not None:
-                conditions.append("f.full_path LIKE ?")
-                params.append(f"{drive_letter}%")
+            if effective_loc is not None:
+                eff_strip = effective_loc.strip()
+                if re.match(r"^[A-Za-z]:", eff_strip):
+                    # Windows 盘符（支持大小写不敏感）
+                    conditions.append("UPPER(SUBSTR(f.full_path, 1, 2)) = ?")
+                    params.append(eff_strip[:2].upper())
+                elif eff_strip.startswith("/Volumes/"):
+                    # macOS 独立卷：精确边界匹配 + 转义 LIKE
+                    conditions.append("(f.full_path = ? OR f.full_path LIKE ? ESCAPE '\\')")
+                    params.append(eff_strip)
+                    params.append(f"{escape_like(eff_strip)}/%")
+                elif eff_strip == "/":
+                    # 系统根目录：排除 /Volumes/
+                    conditions.append("(f.full_path LIKE '/%' AND f.full_path NOT LIKE '/Volumes/%')")
+                else:
+                    conditions.append("(f.full_path = ? OR f.full_path LIKE ? ESCAPE '\\')")
+                    params.append(eff_strip)
+                    params.append(f"{escape_like(eff_strip)}/%")
             
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
@@ -179,39 +199,48 @@ class MainViewModel:
                 """
             ).fetchall()
         return [r["file_ext"] for r in rows]
-    
-    def get_all_drive_letters(self) -> list[str]:
+
+    def get_all_locations(self) -> list[tuple[str, str]]:
         """
-        获取系统中所有文件所在的磁盘盘符
+        获取系统中所有文件所在的位置列表（跨平台：Windows 盘符 / macOS 卷与系统盘）
         
         Returns:
-            磁盘盘符列表（如 ["C:", "D:"]）
+            list[tuple[str, str]]: (display_label, location_key) 列表，已去重并排序
         """
         if self._db is None:
             return []
 
-        drives = set()
+        locations_set = set()
         with self._db.connect() as conn:
             rows = conn.execute(
-                """
-                SELECT DISTINCT SUBSTR(full_path, 1, 2) AS drive
-                FROM files
-                WHERE is_deleted = 0
-                  AND length(full_path) >= 2
-                  AND SUBSTR(full_path, 2, 1) = ':'
-                  AND (
-                      (SUBSTR(full_path, 1, 1) BETWEEN 'A' AND 'Z')
-                      OR (SUBSTR(full_path, 1, 1) BETWEEN 'a' AND 'z')
-                  )
-                """
+                "SELECT DISTINCT full_path FROM files WHERE is_deleted = 0"
             ).fetchall()
 
         for r in rows:
-            drive = r["drive"]
-            if drive:
-                drives.add(drive)
+            loc = extract_location(r["full_path"])
+            if loc:
+                locations_set.add(loc)
 
-        return sorted(drives)
+        def _sort_key(item: tuple[str, str]):
+            label, key = item
+            if key == "/":
+                return (0, label)
+            elif re.match(r"^[A-Za-z]:", key):
+                return (1, label.upper())
+            else:
+                return (2, label.lower())
+
+        return sorted(locations_set, key=_sort_key)
+    
+    def get_all_drive_letters(self) -> list[str]:
+        """
+        获取系统中所有文件所在的磁盘盘符（向后兼容别名）
+        
+        Returns:
+            磁盘盘符列表（如 ["C:", "D:"]）
+        """
+        locations = self.get_all_locations()
+        return [label for label, key in locations if re.match(r"^[A-Za-z]:", key)]
 
     def search_files(self, query: str = "", limit: int = 200) -> list[FileRecord]:
         with self._db.connect() as conn:
