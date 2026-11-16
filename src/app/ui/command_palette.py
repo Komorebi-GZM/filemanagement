@@ -78,6 +78,9 @@ class CommandPalette(QWidget):
     def set_context_file(self, file_id: int, file_name: str):
         self.context_file_id = file_id
         self._history_index = -1
+        self.search_box.blockSignals(True)
+        self.search_box.clear()
+        self.search_box.blockSignals(False)
         if file_id is not None:
             self.search_box.setPlaceholderText(f"为文件 {file_name} 添加标签...")
             self._load_tags()
@@ -97,7 +100,7 @@ class CommandPalette(QWidget):
             except (json.JSONDecodeError, KeyError):
                 continue
         self._history_index = -1
-        if not self.context_file_id and self._history_items:
+        if not self.context_file_id:
             self.list_widget.clear()
             for h in self._history_items:
                 self.list_widget.addItem(QListWidgetItem(h))
@@ -139,19 +142,42 @@ class CommandPalette(QWidget):
         self._suppress_history_reset = False
 
     def _on_text_changed(self, text: str):
+        if self.context_file_id is not None:
+            self._load_tags(text)
+            return
         if text and not self._suppress_history_reset:
             self._history_index = -1
 
-    def _load_tags(self):
+    def _load_tags(self, query: str = ""):
         self.list_widget.clear()
-        if self.vm is not None:
+        if self.vm is None:
+            return
+        q = query.strip()
+        if q:
+            if hasattr(self.vm, "fuzzy_search_tags"):
+                tags = self.vm.fuzzy_search_tags(q)
+            else:
+                tags = [
+                    t for t in self.vm.get_all_tags()
+                    if q.lower() in (t.tag_name or "").lower()
+                ]
+        else:
             tags = self.vm.get_all_tags()
-            for tag in tags:
-                item = QListWidgetItem(tag.tag_name)
-                item.setData(Qt.UserRole, tag.id)
-                self.list_widget.addItem(item)
+        for tag in tags:
+            item = QListWidgetItem(tag.tag_name)
+            item.setData(Qt.UserRole, tag.id)
+            self.list_widget.addItem(item)
+        if self.list_widget.count() > 0:
+            self.list_widget.setCurrentRow(0)
 
     def _on_return_pressed(self):
+        if self.context_file_id is not None:
+            item = self.list_widget.currentItem() or (
+                self.list_widget.item(0) if self.list_widget.count() > 0 else None
+            )
+            if item is not None:
+                self._on_item_activated(item)
+            return
         text = self.search_box.text().strip()
         if text:
             self.text_entered.emit(text)
