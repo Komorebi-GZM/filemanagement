@@ -174,3 +174,30 @@
 - `files_updated` 使用 `pyqtSignal(object)` 并以 `None` 表示“全量重查刷新”，以 `[]` 表示“筛选/搜索结果为空”，避免两者语义冲突
 - `ImportWorker` 新增独立 `import_finished(int)` 信号而非改动 `finished()` 签名，确保既有 0 参数槽函数（如 `deleteLater` 和状态重置）兼容
 
+## [2026-11-15] 续：watchdog 7.x 兼容修复与 CommandPalette 实时标签过滤
+
+**背景：** 根据用户确认，在 PR #3（`fix/audit-bugs-and-cleanup`）中继续完成待办项：解决 `FileMonitor` 在 `watchdog >= 7.x` 下事件失效的问题，并将 `CommandPalette` 的实时标签过滤接入 `MainViewModel.fuzzy_search_tags`。
+
+**完成工作：**
+- **FileMonitor 跨版本兼容（`src/app/services/file_monitor.py`）：**
+  - `_FileChangeHandler` 将 `patterns=["*"]` 调整为 `patterns=None`（在 watchdog 4.x 回退为 `["*"]`，在 7.x+ 回退为 `["**"]`）
+  - 展开 `IGNORE_PATTERNS` 与 `IGNORE_DIRS` 为 `pat` / `**/{pat}` 与 `{dir}/**` / `**/{dir}/**` 形式，确保临时文件与 `.git` / `__pycache__` / `.svn` 在 watchdog 4.x 与 7.x+ 下均能正确忽略
+- **CommandPalette 实时标签过滤（`src/app/ui/command_palette.py`）：**
+  - `set_context_file()` 清理旧输入时不触发多余搜索事件
+  - `_on_text_changed()` 与 `_load_tags()` 在标签模式下实时调用 `vm.fuzzy_search_tags()`（对仅实现 `get_all_tags()` 的测试 mock 提供降级过滤），并自动高亮第一条匹配项
+  - `_on_return_pressed()` 在标签模式下激活当前/首条匹配标签而非触发文件搜索
+- **新增测试：** 在 `tests/services/test_file_monitor.py` 新增忽略规则回归测试；在 `tests/ui/test_command_palette.py` 新增实时标签过滤、回车选中与状态清理测试
+
+**当前状态：**
+- 全量测试在 **watchdog 4.0.2**（`/tmp/fm-venv`）下：`71 passed, 4 skipped`
+- 全量测试在 **watchdog 7.1.0**（`/tmp/fm-venv-wd7`）下：`71 passed, 4 skipped`
+- 4 个 skipped 为默认跳过的 `test_file_monitor_integration.py` 集成测试
+
+**待办事项：**
+- 审查并合并 PR #3 到 `master`
+- 在 Windows 环境运行 `package.bat` 更新 `dist_new/文件管理系统.exe`
+
+**决策记录：**
+- 不在 `requirements.txt` 锁死 `watchdog<5`，而是在 `_FileChangeHandler` 使用 `patterns=None` 与 `**/` 前缀通配规则以同时兼容 watchdog 4.x 与 7.x+
+- `CommandPalette._load_tags()` 对空查询保留调用 `get_all_tags()`，仅在非空查询时调用 `fuzzy_search_tags()`，兼顾既有测试 mock 兼容性
+
