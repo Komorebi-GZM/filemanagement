@@ -263,18 +263,19 @@
   - 兼容 watchdog 7.x：`patterns=None` 消除文件监控超时。
   - 增加 UI 回归测试用例 `tests/ui/test_main_window_fixes.py`。
   - 创建 PR #6 并已合并到 `master`。
-- **推进合并 PR #3 与 PR #4：**
+- **推进合并 PR #3、PR #4 与 PR #5：**
   - 将 PR #3（`fix/audit-bugs-and-cleanup`）rebase 至最新 master 并合入 `master`。
   - 将 PR #4（`chore/cross-platform-win-mac`）base 改为 `master`，rebase 至最新 master 并合入 `master`。
-  - 将 PR #5（`docs/win-mac-location-path-design`）base 切换至 `master`，rebase 到最新 master，保持为干净的 1-commit 状态等待后续实施。
-  - 清理已合并的远程分支 `hotfix/critical-master-bugs`、`fix/audit-bugs-and-cleanup`、`chore/cross-platform-win-mac`。
+  - 将 PR #5（`docs/win-mac-location-path-design`）重定向基底至 `master`，标记为 ready 并通过 `gh pr merge 5 --rebase` 正式合入 `master`。
+  - 清理已合并的远程分支 `hotfix/critical-master-bugs`、`fix/audit-bugs-and-cleanup`、`chore/cross-platform-win-mac`、`docs/win-mac-location-path-design`。
 
 **当前状态：**
 - `master` 分支为最新主线，全量测试套件在 macOS (Python 3.12 + PyQt5 5.15.11 + watchdog 7.1.0) 下通过：`71 passed, 4 skipped`（100% 通过）。
-- PR #1 已清理关闭；PR #3、PR #4、PR #6 已合并；PR #5 处于待实施状态并与 master 保持 clean。
+- PR #1 已清理关闭；PR #3、PR #4、PR #5、PR #6 已全部合并；远端无任何挂起/冲突 PR。
+- 跨平台位置筛选与路径规范化设计文档 `docs/superpowers/specs/2026-11-15-win-mac-location-path-design.md` 已就绪于主线。
 
 **待办事项：**
-- 推进 PR #5（Win + macOS 路径规范化与位置筛选设计规范）的具体代码实现。
+- 按已合并的 PR #5 设计规范推进代码实现（`path_utils.py`、双阶段匹配与 UI 下拉框联动）。
 
 **决策记录：**
 - 生产严重 Bug 严格走独立 hotfix 分支，先行合并到 master，避免与功能特性大 PR 耦合延误发版。
