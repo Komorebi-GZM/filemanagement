@@ -186,24 +186,30 @@ class MainViewModel:
         Returns:
             磁盘盘符列表（如 ["C:", "D:"]）
         """
-        import string
-        from pathlib import Path
-        
+        if self._db is None:
+            return []
+
         drives = set()
         with self._db.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT DISTINCT full_path
+                SELECT DISTINCT SUBSTR(full_path, 1, 2) AS drive
                 FROM files
                 WHERE is_deleted = 0
+                  AND length(full_path) >= 2
+                  AND SUBSTR(full_path, 2, 1) = ':'
+                  AND (
+                      (SUBSTR(full_path, 1, 1) BETWEEN 'A' AND 'Z')
+                      OR (SUBSTR(full_path, 1, 1) BETWEEN 'a' AND 'z')
+                  )
                 """
             ).fetchall()
-        
+
         for r in rows:
-            path = Path(r["full_path"])
-            if path.drive:
-                drives.add(path.drive)
-        
+            drive = r["drive"]
+            if drive:
+                drives.add(drive)
+
         return sorted(drives)
 
     def search_files(self, query: str = "", limit: int = 200) -> list[FileRecord]:
