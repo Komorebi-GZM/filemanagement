@@ -141,3 +141,36 @@
 - QSS 样式使用 f-string 注入 Color 常量，方便后续主题切换
 - 不使用外部图标库（Phosphor/Heroicons），改用 `QFileIconProvider` + `QPainter` 绘制
 - 不使用 Google Fonts（PyInstaller 打包复杂），退化为 Segoe UI 系统字体
+
+## [2026-11-15] 审查问题修复 + 仓库清理 + PR #3 / PR #1 处理
+
+**背景：** 完成全仓库分支与文件全面审查后，按计划创建修复分支与 PR #3，逐项修复审计发现的 UI/ViewModel bug、清理仓库历史遗留文件，并处理已过时冲突的 PR #1。
+
+**完成工作：**
+- **分支与 PR：** 基于 `master` 创建 `fix/audit-bugs-and-cleanup` 并开启 PR #3；关闭过时冲突的 PR #1（`optimize-architecture-5931458531709047786`），同时提取其中的 `get_all_drive_letters` SQL 优化
+- **文档与打包对齐：**
+  - 更新 `README.md` 从 `v1.0.0` 到 `V1.3`（补充 Services 层、FTS5 全文检索、异步导入、`Ctrl+K` 命令面板、`py311-pack` 环境及表结构说明）
+  - 修正 `package.bat` 输出提示目录为 `dist_new`，与 `filemanagement.spec` 保持一致
+- **仓库清理：** `git rm -r --cached .superpowers/` 取消追踪已在 `.gitignore` 中的 `.superpowers/` 目录
+- **Bug 修复与功能补全：**
+  - `MainSignals.files_updated` 改为 `pyqtSignal(object)`，ViewModel 发出 `None` 触发重载，`MainWindow._on_files_updated` 同步刷新文件列表与侧边栏计数，保留空搜索/筛选结果 `[]` 清空列表行为
+  - `ImportWorker` 新增 `import_finished(int)` 信号并在完成后发射实际导入/恢复数量（同时持有 `_thread` 引用避免提前回收）；`MainViewModel` 转发至 `MainSignals.import_finished`，`MainWindow._on_import_finished` 刷新筛选器与列表后弹窗汇报真实数量
+  - `MainWindow._load_filter_options` 使用 `blockSignals` 避免重建下拉框时重复触发筛选查询
+  - 接通 `FileListWidget`（添加标签、添加注释 `NoteDialog`、添加印记 `ImprintDialog`、软删除）与 `TagTreeWidget`（添加子/根标签、删除标签且保护虚拟根节点）右键菜单信号，并改用 `main_window` 引用替代脆弱父链查找
+  - `MainViewModel.get_all_drive_letters` 改用 SQLite `SUBSTR` 直接查询盘符（复用自 PR #1）
+- **新增测试：** 补充 `tests/ui/test_main_window_fixes.py`，并在 `test_async_import.py` 与 `test_main_viewmodel_counts.py` 增加回归测试
+
+**当前状态：**
+- 测试套件（`/tmp/fm-venv`，`watchdog==4.0.2`，`QT_QPA_PLATFORM=offscreen`）：`69 passed, 4 skipped`（4 个 skipped 为默认跳过的 watchdog 真实文件系统集成测试）
+- 注意：`watchdog >= 7.x` 对 `PatternMatchingEventHandler(patterns=["*"])` 改用了 `PurePath.full_match`，本次测试使用 `watchdog==4.0.2` 验证通过（`requirements.txt` 当前仅约束 `watchdog>=4.0.1`）
+- `dist_new/文件管理系统.exe` 仍为 V1.2 构建产物，需在 Windows `py311-pack` 环境执行 `package.bat` 重新打包
+
+**待办事项：**
+- 审查并合并 PR #3 到 `master`
+- 在 Windows 环境运行 `package.bat` 更新 `dist_new/文件管理系统.exe`
+- 可选：在 `requirements.txt` 中限制 `watchdog>=4.0.1,<5` 或将 `FileMonitor` 的 `patterns` 调整为 `None` 以兼容 watchdog 7.x；接入 `CommandPalette` 实时标签过滤（`fuzzy_search_tags`）
+
+**决策记录：**
+- `files_updated` 使用 `pyqtSignal(object)` 并以 `None` 表示“全量重查刷新”，以 `[]` 表示“筛选/搜索结果为空”，避免两者语义冲突
+- `ImportWorker` 新增独立 `import_finished(int)` 信号而非改动 `finished()` 签名，确保既有 0 参数槽函数（如 `deleteLater` 和状态重置）兼容
+
