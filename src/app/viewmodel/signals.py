@@ -5,7 +5,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 class MainSignals(QObject):
     """主信号类"""
-    files_updated = pyqtSignal(list)
+    files_updated = pyqtSignal(object)
     tags_updated = pyqtSignal()
     file_tagged = pyqtSignal(int, int)  # file_id, tag_id
     file_untagged = pyqtSignal(int, int)  # file_id, tag_id

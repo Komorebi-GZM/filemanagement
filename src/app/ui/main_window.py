@@ -440,7 +440,7 @@ class MainWindow(QMainWindow):
         self.tag_tree.itemClicked.connect(self._on_tag_clicked)
         
         # 信号连接
-        self.signals.files_updated.connect(self._update_file_list)
+        self.signals.files_updated.connect(self._on_files_updated)
         self.signals.files_updated.connect(lambda _: self._indexing_label.setText(""))
         self.signals.tags_updated.connect(self._update_tag_tree)
         self.signals.indexing_progress.connect(self._on_indexing_progress)
@@ -494,6 +494,10 @@ class MainWindow(QMainWindow):
         self.filter_location_combo.setCurrentIndex(0)
         self._update_file_list()
     
+    def _on_files_updated(self, files: Optional[List[FileRecord]] = None):
+        self._update_file_list(files)
+        self._update_tag_tree()
+
     def _update_file_list(self, files: Optional[List[FileRecord]] = None):
         if files is None:
             files = self.vm.get_all_files()

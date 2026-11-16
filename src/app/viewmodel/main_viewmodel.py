@@ -322,8 +322,9 @@ class MainViewModel:
             logger.warning("Import already in progress, ignoring duplicate call")
             return 0
         worker = ImportWorker(self._db, candidates_list)
-        worker.progress.connect(lambda c, t: self.signals.import_progress.emit(c, t))
-        worker.finished.connect(lambda: self.signals.files_updated.emit([]))
+        if self.signals:
+            worker.progress.connect(lambda c, t: self.signals.import_progress.emit(c, t))
+            worker.finished.connect(lambda: self.signals.files_updated.emit(None))
         worker.finished.connect(worker.deleteLater)
         worker.finished.connect(lambda: setattr(self, '_import_worker', None))
         if self._index_worker is not None:
@@ -544,7 +545,8 @@ class MainViewModel:
             )
             conn.commit()
         
-        self.signals.files_updated.emit([])
+        if self.signals:
+            self.signals.files_updated.emit(None)
 
     def get_file_note(self, file_id: int) -> Optional[str]:
         """
@@ -808,8 +810,8 @@ class MainViewModel:
                         cand = ImportCandidate(path=p, size=int(st.st_size))
                         self.import_files([cand])
                         updated = True
-        if updated:
-            self.signals.files_updated.emit([])
+        if updated and self.signals:
+            self.signals.files_updated.emit(None)
 
     def _handle_file_moved(self, file_hash: str, new_full_path: str) -> Optional[int]:
         row = self._db.find_by_hash(file_hash)
