@@ -6,6 +6,7 @@ from typing import Optional
 
 from PyQt5.QtCore import QObject, Qt, QThread, pyqtSignal
 
+from src.app.core.path_utils import normalize_path
 from src.app.db.database import Database
 from src.app.viewmodel.main_viewmodel import sha256_file, ImportCandidate
 
@@ -47,7 +48,7 @@ class ImportWorker(QObject):
                 continue
             file_name = c.path.name
             file_ext = c.path.suffix.lower().lstrip(".") if c.path.suffix else None
-            full_path = str(c.path.resolve())
+            full_path = normalize_path(c.path)
             try:
                 st = c.path.stat()
             except OSError:

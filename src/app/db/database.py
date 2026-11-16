@@ -53,16 +53,35 @@ class Database:
         return dict(row) if row else None
 
     def find_by_path_and_size(self, full_path: str, file_size: int) -> Optional[int]:
+        from src.app.core.path_utils import normalize_path
+        norm_path = normalize_path(full_path)
         with self.connect() as conn:
+            # 阶段一：快路径（利用 idx_files_full_path 索引进行精确 NFC 匹配）
             row = conn.execute(
                 """
                 SELECT id FROM files
                 WHERE full_path = ? AND file_size = ? AND is_deleted = 0
                 LIMIT 1
                 """,
-                (full_path, file_size),
+                (norm_path, file_size),
             ).fetchone()
-        return row["id"] if row else None
+            if row:
+                return row["id"]
+
+            # 阶段二：大小写不敏感兜底匹配（带 LIMIT 10 并使用 Python casefold 校验）
+            rows = conn.execute(
+                """
+                SELECT id, full_path FROM files
+                WHERE full_path = ? COLLATE NOCASE AND file_size = ? AND is_deleted = 0
+                LIMIT 10
+                """,
+                (norm_path, file_size),
+            ).fetchall()
+            norm_cf = norm_path.casefold()
+            for r in rows:
+                if normalize_path(r["full_path"]).casefold() == norm_cf:
+                    return r["id"]
+        return None
 
     def update_file_path(self, file_id: int, new_path: str, new_name: str, new_ext: str) -> None:
         now = int(time.time())
