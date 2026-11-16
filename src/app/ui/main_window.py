@@ -72,8 +72,9 @@ class TagChipWidget(QWidget):
 
 
 class FileListWidget(QListWidget):
-    def __init__(self, parent: Optional[QWidget] = None):
+    def __init__(self, parent: Optional[QWidget] = None, main_window=None):
         super().__init__(parent)
+        self.main_window = main_window
         self.setSelectionMode(QListWidget.ExtendedSelection)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
@@ -83,52 +84,134 @@ class FileListWidget(QListWidget):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
         self._icon_provider = QFileIconProvider()
-    
+
+    def _get_main_window(self):
+        return self.main_window if self.main_window is not None else self.window()
+
     def show_context_menu(self, pos: QPoint):
+        clicked_item = self.itemAt(pos)
+        if clicked_item is not None and not clicked_item.isSelected():
+            self.clearSelection()
+            clicked_item.setSelected(True)
+
+        has_selection = bool(self.selectedItems())
         menu = QMenu(self)
         add_tag_action = QAction("添加标签", self)
         add_note_action = QAction("添加注释", self)
         add_imprint_action = QAction("添加印记", self)
         delete_action = QAction("删除", self)
-        
+
+        add_tag_action.setEnabled(has_selection)
+        add_note_action.setEnabled(has_selection)
+        add_imprint_action.setEnabled(has_selection)
+        delete_action.setEnabled(has_selection)
+
         # 连接信号
+        add_tag_action.triggered.connect(lambda: self._on_add_tag())
+        add_note_action.triggered.connect(lambda: self._on_edit_note())
+        add_imprint_action.triggered.connect(lambda: self._on_add_imprint())
         delete_action.triggered.connect(lambda: self._on_delete())
-        
+
         menu.addAction(add_tag_action)
         menu.addAction(add_note_action)
         menu.addAction(add_imprint_action)
         menu.addSeparator()
         menu.addAction(delete_action)
         menu.exec_(self.mapToGlobal(pos))
-    
+
+    def _on_add_tag(self):
+        """为选中文件添加标签"""
+        selected_items = self.selectedItems()
+        main_window = self._get_main_window()
+        if not selected_items or not hasattr(main_window, "vm"):
+            return
+
+        tags = main_window.vm.get_all_tags()
+        if not tags:
+            QMessageBox.information(self, "提示", "暂无可用标签，请先创建标签")
+            return
+
+        if len(selected_items) == 1:
+            file_id = selected_items[0].data(Qt.UserRole)
+            file_name = selected_items[0].text()
+            if file_id and hasattr(main_window, "_on_add_tag_btn_clicked"):
+                main_window._on_add_tag_btn_clicked(file_id, file_name)
+            return
+
+        tag_names = [t.tag_name for t in tags]
+        selected_name, ok = QInputDialog.getItem(
+            self, "添加标签", "选择要添加的标签:", tag_names, 0, False
+        )
+        if ok and selected_name:
+            tag = next((t for t in tags if t.tag_name == selected_name), None)
+            if tag:
+                for item in selected_items:
+                    file_id = item.data(Qt.UserRole)
+                    if file_id:
+                        main_window.vm.add_tag_to_file(file_id, tag.id)
+                if hasattr(main_window, "_update_tag_tree"):
+                    main_window._update_tag_tree()
+                if hasattr(main_window, "_on_file_selected"):
+                    main_window._on_file_selected()
+                QMessageBox.information(
+                    self, "标记成功", f"已为 {len(selected_items)} 个文件添加标签"
+                )
+
+    def _on_edit_note(self):
+        """编辑选中文件的文档注释"""
+        selected_items = self.selectedItems()
+        main_window = self._get_main_window()
+        if not selected_items or not hasattr(main_window, "vm"):
+            return
+
+        file_id = selected_items[0].data(Qt.UserRole)
+        if not file_id:
+            return
+
+        existing_note = main_window.vm.get_file_note(file_id) or ""
+        dialog = NoteDialog(self, note=existing_note)
+        if dialog.exec_() == QDialog.Accepted:
+            note = dialog.get_note()
+            main_window.vm.set_file_note(file_id, note)
+            if hasattr(main_window, "note_tab"):
+                main_window.note_tab.setText(note or "无注释")
+            if hasattr(main_window, "_on_file_selected"):
+                main_window._on_file_selected()
+            QMessageBox.information(self, "保存成功", "文档注释已保存")
+
+    def _on_add_imprint(self):
+        """为选中文件添加印记"""
+        main_window = self._get_main_window()
+        if hasattr(main_window, "_on_add_imprint"):
+            main_window._on_add_imprint()
+
     def _on_delete(self):
         """软删除文件"""
         selected_items = self.selectedItems()
         if not selected_items:
             return
-        
+
         reply = QMessageBox.question(
             self, "确认删除", f"确定要删除选中的 {len(selected_items)} 个文件吗？",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
-        
+
         if reply == QMessageBox.Yes:
+            main_window = self._get_main_window()
             # 调用ViewModel的软删除方法
             for item in selected_items:
                 file_id = item.data(Qt.UserRole)
-                if file_id:
-                    # 找到MainWindow对象
-                    main_window = self.parentWidget().parentWidget().parentWidget()
-                    if hasattr(main_window, 'vm'):
-                        main_window.vm.soft_delete_file(file_id)
-            
+                if file_id and hasattr(main_window, 'vm'):
+                    main_window.vm.soft_delete_file(file_id)
+
             # 显示成功提示
             QMessageBox.information(self, "删除成功", f"已删除 {len(selected_items)} 个文件")
-            # 刷新文件列表
-            main_window = self.parentWidget().parentWidget().parentWidget()
+            # 刷新文件列表与侧边栏计数
             if hasattr(main_window, '_update_file_list'):
                 main_window._update_file_list()
-    
+            if hasattr(main_window, '_update_tag_tree'):
+                main_window._update_tag_tree()
+
     def startDrag(self, supportedActions):
         selected_items = self.selectedItems()
         if not selected_items:
@@ -160,12 +243,42 @@ class TagTreeWidget(QTreeWidget):
         self.customContextMenuRequested.connect(self.show_context_menu)
     
     def show_context_menu(self, pos: QPoint):
+        item = self.itemAt(pos)
+        if item is not None:
+            self.setCurrentItem(item)
+        tag_id = item.data(0, Qt.UserRole) if item is not None else None
+
         menu = QMenu(self)
         add_tag_action = QAction("添加标签", self)
         delete_tag_action = QAction("删除标签", self)
+        delete_tag_action.setEnabled(tag_id is not None)
+
+        add_tag_action.triggered.connect(lambda checked=False, parent_id=tag_id: self._on_add_tag(parent_id))
+        delete_tag_action.triggered.connect(lambda checked=False, t_id=tag_id, t_item=item: self._on_delete_tag(t_id, t_item))
+
         menu.addAction(add_tag_action)
         menu.addAction(delete_tag_action)
         menu.exec_(self.mapToGlobal(pos))
+
+    def _on_add_tag(self, parent_id: Optional[int] = None):
+        if not self.main_window or not hasattr(self.main_window, "vm"):
+            return
+        tag_name, ok = QInputDialog.getText(self, "添加标签", "请输入标签名称:")
+        if ok and tag_name.strip():
+            self.main_window.vm.create_tag(tag_name.strip(), parent_id=parent_id)
+
+    def _on_delete_tag(self, tag_id: Optional[int], item: Optional[QTreeWidgetItem] = None):
+        if tag_id is None or not self.main_window or not hasattr(self.main_window, "vm"):
+            return
+        label = item.text(0) if item is not None else str(tag_id)
+        reply = QMessageBox.question(
+            self, "确认删除", f"确定要删除标签「{label}」吗？",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.main_window.vm.delete_tag(tag_id)
+            if hasattr(self.main_window, "_on_file_selected"):
+                self.main_window._on_file_selected()
     
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("application/x-file-ids"):
@@ -197,6 +310,8 @@ class TagTreeWidget(QTreeWidget):
                             self.main_window.vm.add_tag_to_file(file_id, tag_id)
                         except ValueError:
                             pass
+                    self.main_window._update_tag_tree()
+                    self.main_window._on_file_selected()
                     QMessageBox.information(self, "标记成功", f"已为 {len(file_ids)} 个文件添加标签")
             event.accept()
         else:
@@ -326,7 +441,7 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.tag_tree)
         
         # 文件列表
-        self.file_list = FileListWidget()
+        self.file_list = FileListWidget(main_window=self)
         self.splitter.addWidget(self.file_list)
         
         # 预览窗口
