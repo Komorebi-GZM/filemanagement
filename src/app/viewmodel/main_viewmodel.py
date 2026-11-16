@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
+from src.app.core.path_utils import normalize_path, extract_location, escape_like
 from src.app.db.database import Database, DbError
 from src.app.services.file_monitor import FileEvent
 from src.app.model.file_record import FileRecord
@@ -766,12 +767,7 @@ class MainViewModel:
                         if row:
                             file_id = row["id"]
                     if file_id is None:
-                        with self._db.connect() as conn:
-                            row = conn.execute(
-                                "SELECT id FROM files WHERE full_path = ? AND is_deleted = 0 LIMIT 1",
-                                (ev.src_path,),
-                            ).fetchone()
-                            file_id = row["id"] if row else None
+                        file_id, _ = self._find_active_file_by_path(ev.src_path)
                     if file_id is not None:
                         self._handle_file_modified(file_id, int(st.st_size), int(st.st_mtime))
                         updated = True
@@ -780,15 +776,11 @@ class MainViewModel:
                             if ext in {".txt", ".md", ".log", ".csv", ".pdf", ".docx", ".xlsx"}:
                                 self._index_worker.enqueue(file_id, p)
             elif ev.event_type == "deleted":
-                file_id = None
-                with self._db.connect() as conn:
-                    row = conn.execute(
-                        "SELECT id FROM files WHERE full_path = ? AND is_deleted = 0 LIMIT 1",
-                        (ev.src_path,),
-                    ).fetchone()
-                    if row:
-                        file_id = row["id"]
-                self._handle_file_deleted_by_path(ev.src_path)
+                file_id, file_hash = self._find_active_file_by_path(ev.src_path)
+                if file_hash:
+                    self._db.soft_delete_by_hash(file_hash)
+                else:
+                    self._handle_file_deleted_by_path(ev.src_path)
                 updated = True
                 if file_id is not None and self._db is not None:
                     with self._db.connect() as fts_conn:
@@ -820,27 +812,53 @@ class MainViewModel:
         if updated and self.signals:
             self.signals.files_updated.emit(None)
 
+    def _find_active_file_by_path(self, full_path: str) -> tuple[Optional[int], Optional[str]]:
+        """
+        双阶段路径查询未删除的文件：
+        1. 快路径：通过规范化路径直接利用 full_path 索引匹配
+        2. 兜底路径：COLLATE NOCASE + Python casefold 校验
+        """
+        if self._db is None or not full_path:
+            return None, None
+        norm_path = normalize_path(full_path)
+        with self._db.connect() as conn:
+            # 阶段一（快路径）
+            row = conn.execute(
+                "SELECT id, file_hash, full_path FROM files WHERE full_path = ? AND is_deleted = 0 LIMIT 1",
+                (norm_path,),
+            ).fetchone()
+            if row:
+                return row["id"], row["file_hash"]
+
+            # 阶段二（大小写/Unicode 兜底）
+            rows = conn.execute(
+                "SELECT id, file_hash, full_path FROM files WHERE full_path = ? COLLATE NOCASE AND is_deleted = 0 LIMIT 10",
+                (norm_path,),
+            ).fetchall()
+            norm_cf = norm_path.casefold()
+            for r in rows:
+                if normalize_path(r["full_path"]).casefold() == norm_cf:
+                    return r["id"], r["file_hash"]
+        return None, None
+
     def _handle_file_moved(self, file_hash: str, new_full_path: str) -> Optional[int]:
         row = self._db.find_by_hash(file_hash)
         if row is None:
             return None
-        p = Path(new_full_path)
+        norm_dest = normalize_path(new_full_path)
+        p = Path(norm_dest)
         self._db.update_file_path(
             file_id=row["id"],
-            new_path=new_full_path,
+            new_path=norm_dest,
             new_name=p.name,
             new_ext=p.suffix.lower().lstrip(".") if p.suffix else None,
         )
         return row["id"]
 
     def _handle_file_deleted_by_path(self, full_path: str) -> None:
-        with self._db.connect() as conn:
-            row = conn.execute(
-                "SELECT file_hash FROM files WHERE full_path = ? AND is_deleted = 0 LIMIT 1",
-                (full_path,),
-            ).fetchone()
-        if row:
-            self._db.soft_delete_by_hash(row["file_hash"])
+        file_id, file_hash = self._find_active_file_by_path(full_path)
+        if file_hash:
+            self._db.soft_delete_by_hash(file_hash)
 
     def _handle_file_modified(self, file_id: int, file_size: int, modify_time: int) -> None:
         self._db.update_file_meta(file_id, file_size, modify_time)
