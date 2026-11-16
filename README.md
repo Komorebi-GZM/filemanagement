@@ -41,7 +41,11 @@ filemanagement/
 │   ├── main.py                 # 应用入口文件（初始化 DB/IndexWorker/FileMonitor）
 │   └── app/
 │       ├── __init__.py
-│       ├── core/               # 核心配置模块（日志、路径、配置加载）
+│       ├── core/               # 核心工具模块
+│       │   ├── logging_setup.py    # 日志配置
+│       │   ├── paths.py            # 路径管理与跨平台数据目录
+│       │   ├── path_utils.py       # 跨平台路径规范化（NFC/软链接）、位置抽象与 SQL 转义
+│       │   └── settings.py         # 配置加载
 │       ├── db/                 # 数据库连接、FTS5 方法与 schema.sql
 │       ├── model/              # 数据模型层（FileRecord、Tag）
 │       ├── services/           # 独立服务层（文件监控、异步导入、全文提取与后台索引）
@@ -139,7 +143,10 @@ pip install -r requirements.txt
 python -m src.main
 ```
 
-> **平台差异**：顶部「位置」筛选基于 Windows 盘符（`C:`、`D:`），在 macOS 上该下拉框仅显示「所有位置」；`Ctrl+K` / `Ctrl+I` / `Ctrl+Q` 在 macOS 上由 Qt 自动映射为 `⌘K` / `⌘I` / `⌘Q`。
+> **平台支持与跨平台特性**：
+> - **位置筛选**：Windows 支持按盘符聚合筛选（`C:`、`D:`）；macOS 支持区分主系统盘（`Macintosh HD`）与外接独立卷（`/Volumes/<卷名>`），并自动过滤内部系统隐藏卷（如 `/System/Volumes/Data`）。
+> - **路径与 Unicode 规范化**：全平台写入统一执行 Unicode NFC 规范化，消除 macOS APFS/HFS+ 的 NFD 分解字符与用户输入的不一致，并解析符号链接消除路径别名。
+> - **快捷键适配**：`Ctrl+K` / `Ctrl+I` / `Ctrl+Q` 在 macOS 上由 Qt 自动适配为 `⌘K` / `⌘I` / `⌘Q`。
 
 ---
 
