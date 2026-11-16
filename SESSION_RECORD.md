@@ -201,3 +201,29 @@
 - 不在 `requirements.txt` 锁死 `watchdog<5`，而是在 `_FileChangeHandler` 使用 `patterns=None` 与 `**/` 前缀通配规则以同时兼容 watchdog 4.x 与 7.x+
 - `CommandPalette._load_tags()` 对空查询保留调用 `get_all_tags()`，仅在非空查询时调用 `fuzzy_search_tags()`，兼顾既有测试 mock 兼容性
 
+## [2026-11-15] Win + macOS 双平台开发兼容线调整（新 PR，基于 PR #3 分支）
+
+**背景：** 用户确认项目后续将在 Windows 与 macOS 上共同开发，需调整依赖/脚本/打包的兼容基线，并以独立 PR 提交。
+
+**完成工作：**
+- `requirements.txt`：转为 LF；`PyQt5>=5.15.10,<5.16`（macOS arm64/universal2 wheel）、`watchdog>=4.0.1,<8`（4.0.2 与 7.1.0 均已验证）
+- 新增 `.gitattributes`（源码 LF、`.bat` CRLF、二进制不转换）
+- 新增 `start.sh` / `package.sh`（macOS/Linux，优先 `py311-pack`，可用 `FM_PYTHON` 覆盖）
+- `filemanagement.spec` 按 `sys.platform` 分支：Windows 保持 onefile；macOS 使用 onedir + `.app`（BUNDLE）
+- `tests/test_env.py`：Python 版本断言由 `== 3.11` 放宽为 `>= 3.11`
+- `README.md`：补充双平台环境、脚本、打包与平台差异说明
+
+**当前状态：**
+- Linux 上 watchdog 4.0.2 / 7.1.0 全量测试：`71 passed, 4 skipped`
+- macOS `.app` 打包与 Windows 打包未在本环境实测（PyInstaller 不支持交叉编译），需在对应系统上跑一次 `package.sh` / `package.bat` 验证
+
+**待办事项：**
+- 在 Mac 上实机验证启动、`package.sh` 与 `.app`；视需要配置签名/公证与 `universal2`
+- 「位置」筛选目前基于盘符，macOS 下仅显示「所有位置」，可后续改为按卷（`/Volumes/*`）
+- PR #3 合并后，将本 PR 基底改为 `master`
+
+**决策记录：**
+- 不锁定 `watchdog<5`，上限设 `<8` 以覆盖已验证版本
+- macOS 采用 onedir + `.app`，因 onefile 窗口应用在 macOS 上被 PyInstaller 弃用
+- 新 PR 基于 `fix/audit-bugs-and-cleanup`（堆叠 PR），避免与 PR #3 中的 README/file_monitor 改动冲突
+

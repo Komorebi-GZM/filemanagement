@@ -1,0 +1,11 @@
+# 统一换行符：源码/配置用 LF，Windows 脚本用 CRLF，二进制不转换
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sh text eol=lf
+
+*.exe binary
+*.png binary
+*.docx binary
+*.sqlite3 binary

@@ -56,8 +56,9 @@ filemanagement/
 ├── requirements.txt            # Python 依赖
 ├── filemanagement.spec         # PyInstaller 打包配置
 ├── pytest.ini                  # pytest 配置
-├── start.bat                   # 启动脚本（py311-pack）
-└── package.bat                 # 打包脚本（py311-pack）
+├── start.bat / start.sh        # 启动脚本（Windows / macOS+Linux）
+├── package.bat / package.sh    # 打包脚本（Windows / macOS+Linux）
+└── .gitattributes              # 换行符规范（源码 LF，.bat CRLF）
 ```
 
 项目采用 **MVVM + Services** 分层架构：
@@ -99,22 +100,24 @@ filemanagement/
 
 #### 环境要求
 
-- **操作系统**：Windows 10/11（开发环境亦支持 Linux/macOS 测试）
-- **Python**：3.11+（`py311-pack` Conda 环境）
+- **操作系统**：Windows 10/11、macOS 12+（Intel / Apple Silicon）为官方开发平台；Linux 仅用于 CI/测试（`QT_QPA_PLATFORM=offscreen`）
+- **Python**：3.11+（推荐 `py311-pack` Conda 环境）
+- **关键依赖兼容线**：`PyQt5>=5.15.10,<5.16`（5.15.10+ 起提供 macOS arm64 / universal2 wheel）、`watchdog>=4.0.1,<8`（已在 4.0.2 与 7.1.0 验证）
 - **内存**：至少 2GB
 - **磁盘空间**：至少 100MB 可用空间
 
-#### 方法 1：直接运行可执行文件（Windows）
+#### 方法 1：直接运行打包产物
 
-1. 进入 `dist_new` 目录
-2. 运行 `文件管理系统.exe`
+- **Windows**：进入 `dist_new` 目录，运行 `文件管理系统.exe`
+- **macOS**：运行 `package.sh` 后打开 `dist_new/文件管理系统.app`（未签名，首次需右键 → 打开）
 
 #### 方法 2：使用启动脚本
 
 需要已配置 `py311-pack` conda 环境：
 
 ```bash
-start.bat
+start.bat      # Windows
+./start.sh     # macOS / Linux（优先使用 py311-pack，其次 .venv，最后 python3；可用 FM_PYTHON 指定解释器）
 ```
 
 #### 方法 3：使用 Python 直接运行与测试
@@ -126,6 +129,17 @@ conda run -n py311-pack python -m src.main
 # 运行测试套件
 conda run -n py311-pack python -m pytest
 ```
+
+macOS 首次配置示例：
+
+```bash
+conda create -n py311-pack python=3.11 -y
+conda activate py311-pack
+pip install -r requirements.txt
+python -m src.main
+```
+
+> **平台差异**：顶部「位置」筛选基于 Windows 盘符（`C:`、`D:`），在 macOS 上该下拉框仅显示「所有位置」；`Ctrl+K` / `Ctrl+I` / `Ctrl+Q` 在 macOS 上由 Qt 自动映射为 `⌘K` / `⌘I` / `⌘Q`。
 
 ---
 
@@ -155,13 +169,14 @@ conda run -n py311-pack python -m pytest
 
 ### 打包发布
 
-使用 PyInstaller 打包为独立可执行文件（需 `py311-pack` 环境）：
+使用 PyInstaller 打包（需 `py311-pack` 环境）。**PyInstaller 不支持交叉编译，需在目标系统上分别打包：**
 
 ```bash
-package.bat
+package.bat    # Windows -> dist_new/文件管理系统.exe
+./package.sh   # macOS   -> dist_new/文件管理系统.app
 ```
 
-打包配置见 `filemanagement.spec`，产物输出到 `dist_new/` 目录。
+打包配置见 `filemanagement.spec`（按 `sys.platform` 区分 Windows onefile 与 macOS onedir `.app`），产物输出到 `dist_new/` 目录。
 
 ---
 
