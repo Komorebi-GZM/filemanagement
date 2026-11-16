@@ -327,14 +327,16 @@
   - 确认 PR #1 已关闭且远程废弃分支已删除。
   - 确认 `.superpowers/` 目录在 Git 中处于完全未跟踪状态（未污染主线）。
   - 确认 UI 严重 Bug（列表被清空及异步导入统计）已在 PR #6（Hotfix）中完整修复并包含自动化回归测试用例。
-- **完善 README 文档（PR #8）：**
+- **完善 README 文档（PR #8）与发布里程碑 Tag：**
   - 切出分支 `docs/update-readme`，更新 `README.md` 项目结构树补齐 `src/app/core/path_utils.py` 说明。
   - 补充 Windows 盘符与 macOS 独立卷/系统主盘位置筛选特性的说明与快捷键适配说明。
   - 创建并合并 PR #8 到 `master`。
+  - 基于 `master` 提交 `f273ebe` 发布里程碑版本标签 `v1.4-cross-platform`（别名 `v1.4.0`）并推送到远端。
 
 **当前状态：**
 - `master` 分支为最新主线，全量测试套件 94 个用例：`90 passed, 4 skipped`（100% 通过）。
 - 远端所有 PR（#1 ~ #8）均已关闭/合并，无任何技术债或挂起分支。
+- 发布里程碑标签：`v1.4-cross-platform`、`v1.4.0`。
 
 **待办事项：**
 - 后续可根据需要安排在 Windows 机器上执行 `package.bat` 验证。
