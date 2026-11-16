@@ -74,3 +74,27 @@ class TestFileMonitor:
         monitor.stop()
         assert len(collected) >= 1
         assert len(collected[0]) == 2
+
+    def test_ignores_temp_files_and_ignored_dirs(self, monitor, tmp_path, qtbot):
+        collected = []
+        monitor.file_system_changed.connect(collected.append)
+        watch_dir = tmp_path / "watch3"
+        watch_dir.mkdir()
+        git_dir = watch_dir / ".git"
+        git_dir.mkdir()
+        monitor.start([watch_dir])
+
+        (watch_dir / "ignored.tmp").write_text("tmp")
+        (watch_dir / "Thumbs.db").write_text("thumb")
+        (git_dir / "HEAD").write_text("ref")
+        (watch_dir / "valid.txt").write_text("ok")
+
+        qtbot.waitUntil(lambda: len(collected) > 0, timeout=5000)
+        qtbot.wait(80)
+        monitor.stop()
+
+        paths = [Path(ev.src_path).name for batch in collected for ev in batch]
+        assert "valid.txt" in paths
+        assert "ignored.tmp" not in paths
+        assert "Thumbs.db" not in paths
+        assert "HEAD" not in paths

@@ -26,9 +26,18 @@ class _FileChangeHandler(PatternMatchingEventHandler):
     IGNORE_DIRS = [".git", "__pycache__", ".svn"]
 
     def __init__(self, queue_fn):
+        exclude_patterns = [
+            pattern
+            for pat in self.IGNORE_PATTERNS
+            for pattern in (pat, f"**/{pat}")
+        ] + [
+            pattern
+            for dir_name in self.IGNORE_DIRS
+            for pattern in (f"{dir_name}/**", f"**/{dir_name}/**")
+        ]
         super().__init__(
-            patterns=["*"],
-            ignore_patterns=self.IGNORE_PATTERNS,
+            patterns=None,
+            ignore_patterns=exclude_patterns,
             ignore_directories=True,
             case_sensitive=False,
         )
