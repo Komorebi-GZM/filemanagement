@@ -305,13 +305,41 @@
 
 **当前状态：**
 - 全量测试套件共 94 个用例，在 macOS (Python 3.12 + PyQt5 5.15.11 + watchdog 7.1.0) 下全部通过：`90 passed, 4 skipped`（100% 通过）。
-- 功能分支 `feat/win-mac-location-path` 准备就绪，可推送并创建 PR。
+- 功能分支 `feat/win-mac-location-path` 已通过 PR #7 完整审查合入 `master`。
 
 **待办事项：**
-- 推送分支至 origin 并创建 PR 指向 `master`，引用设计文档 [2026-11-15-win-mac-location-path-design.md](docs/superpowers/specs/2026-11-15-win-mac-location-path-design.md)。
+- 无。
 
 **决策记录：**
 - 查询侧将 `COLLATE NOCASE` 限制为阶段二降级路径并带 `LIMIT 10`，杜绝未命中时的全表扫描拖慢主查询速度。
 - macOS 隐藏系统卷（`/System/Volumes/Data` 等）统一收敛至 `Macintosh HD`，避免内部卷名暴露在用户下拉框中。
+
+## [2026-11-16] 合并 PR #7、验证技术债清理与更新 README（PR #8）
+
+**背景：** 对 PR #7 进行代码审查并合并至主线；核实 PR #1、`.superpowers/` 跟踪与 UI Bug 的修复状态；通过分支 `docs/update-readme`（PR #8）完善 README 文档。
+
+**完成工作：**
+- **审查与合并 PR #7：**
+  - 重点核验 `path_utils.py`（Unicode NFC 规范化）与 `database.py`（精确索引优先 + 受限大小写兜底）。
+  - 执行 `gh pr merge 7 --rebase` 正式合入 `master`，清理远程临时分支。
+  - 本地切回 `master` 拉取最新代码，执行全量自动化测试：`90 passed, 4 skipped`（100% 通过）。
+- **技术债与历史遗留确认：**
+  - 确认 PR #1 已关闭且远程废弃分支已删除。
+  - 确认 `.superpowers/` 目录在 Git 中处于完全未跟踪状态（未污染主线）。
+  - 确认 UI 严重 Bug（列表被清空及异步导入统计）已在 PR #6（Hotfix）中完整修复并包含自动化回归测试用例。
+- **完善 README 文档（PR #8）：**
+  - 切出分支 `docs/update-readme`，更新 `README.md` 项目结构树补齐 `src/app/core/path_utils.py` 说明。
+  - 补充 Windows 盘符与 macOS 独立卷/系统主盘位置筛选特性的说明与快捷键适配说明。
+  - 创建并合并 PR #8 到 `master`。
+
+**当前状态：**
+- `master` 分支为最新主线，全量测试套件 94 个用例：`90 passed, 4 skipped`（100% 通过）。
+- 远端所有 PR（#1 ~ #8）均已关闭/合并，无任何技术债或挂起分支。
+
+**待办事项：**
+- 后续可根据需要安排在 Windows 机器上执行 `package.bat` 验证。
+
+**决策记录：**
+- README 保持与最新架构一致，将「平台差异仅 Windows 有位置筛选」修正为双平台完整支持。
 
 
