@@ -227,6 +227,27 @@
 - macOS 采用 onedir + `.app`，因 onefile 窗口应用在 macOS 上被 PyInstaller 弃用
 - 新 PR 基于 `fix/audit-bugs-and-cleanup`（堆叠 PR），避免与 PR #3 中的 README/file_monitor 改动冲突
 
+## [2026-11-15] 跨平台「位置筛选」与「路径规范化」设计方案与测试用例（Draft PR）
+
+**背景：** 按 `/grill-me` 访谈结果，将 Windows + macOS 跨平台「位置筛选」与「路径规范化/监控匹配」方案及测试用例整理归档并挂起 Draft PR，暂不实施代码改动。
+
+**完成工作：**
+- 新增设计文档 `docs/superpowers/specs/2026-11-15-win-mac-location-path-design.md`：
+  - 定义 `src/app/core/path_utils.py`（`normalize_path`、`extract_location`、`escape_like`）
+  - 明确写入侧规范化 + 查询侧精确/大小写兜底双阶段匹配策略（无 schema 变更）
+  - 明确 `MainViewModel.get_all_locations()` / `list_files(..., location=...)` 与旧接口兼容，以及 `MainWindow` 下拉框 `label` / `itemData` 映射
+  - 设计 4 个测试模块共 18 个测试用例
+- 基于 `chore/cross-platform-win-mac` 推送分支 `docs/win-mac-location-path-design` 并创建 Draft PR
+
+**当前状态：**
+- 仅新增设计文档与会话记录，未改动任何 `src/` 或 `tests/` 代码
+
+**待办事项：**
+- 方案评审通过并合入 PR #3、PR #4 后，按设计文档实施代码与测试用例
+
+**决策记录：**
+- 使用 Draft PR 挂载设计方案，避免未评审前修改业务代码
+
 ## [2026-11-16] 梳理清理废弃 PR #1、Hotfix 修复 master 严重 Bug、合并推进 PR #3 与 PR #4
 
 **背景：** 梳理仓库 PR 全景，清理已废弃分支与仓库卫生问题，将 master 上的严重列表清空与异步导入 Bug 独立开 hotfix 分支验证合并，并依次推进合并上游 PR #3 与跨平台基线 PR #4。
@@ -258,5 +279,4 @@
 **决策记录：**
 - 生产严重 Bug 严格走独立 hotfix 分支，先行合并到 master，避免与功能特性大 PR 耦合延误发版。
 - 堆叠 PR 在底层 PR 合并后，通过 PATCH base 为 master + rebase，保持线性整洁的历史。
-
 
