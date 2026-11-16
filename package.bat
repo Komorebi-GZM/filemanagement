@@ -28,5 +28,5 @@ if %errorlevel% neq 0 (
 )
 
 echo 打包完成！
-echo 可执行文件已生成在 dist 目录中
+echo 可执行文件已生成在 dist_new 目录中
 pause
